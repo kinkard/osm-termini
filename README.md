@@ -18,7 +18,7 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-Rows from the 2026-11-09 planet: 29,384, of them 8,521 in 88 languages other than the plain tags.
+Rows from the 2026-11-09 planet: 29,373, of them 8,510 in 88 languages other than the plain tags.
 
 ## Routes and ends
 

@@ -479,8 +479,14 @@ fn split_outside<'a>(name: &'a str, sep: &str) -> Option<[&'a str; 2]> {
 }
 
 /// The first and last part of a name split outside brackets at the first of `SEPS` it holds there, else of its trailing
-/// bracket: "JR Kyoto Line (Osaka - Kyoto)"; trimmed, `None` when one is empty.
+/// bracket: "JR Kyoto Line (Osaka - Kyoto)"; trimmed, `None` when one is empty. A label before a colon is cut first, as
+/// it may hold a separator: "AREX - Todas las paradas: Seoul → Incheon".
 pub fn split_name(name: &str) -> Option<[&str; 2]> {
+    if let Some((_, rest)) = name.rsplit_once([':', '：'])
+        && let Some(parts) = split_name(rest)
+    {
+        return Some(parts);
+    }
     let Some([a, b]) = SEPS.iter().find_map(|sep| split_outside(name, sep)) else {
         return split_name(trailing(name)?.1);
     };
@@ -979,7 +985,16 @@ mod tests {
         );
         assert_eq!(
             split_name("RE 1: Hamburg => Lübeck"),
-            Some(["RE 1: Hamburg", "Lübeck"])
+            Some(["Hamburg", "Lübeck"])
+        );
+        assert_eq!(
+            split_name("Airport Railroad Express - Todas las paradas: Seoul Station → Incheon T2"),
+            Some(["Seoul Station", "Incheon T2"])
+        );
+        assert_eq!(
+            split_name("Rostock - Gedser: 2h"),
+            Some(["Rostock", "Gedser: 2h"]),
+            "nothing splits after the colon"
         );
         // Not inside brackets; the trailing bracket's parts when nothing splits outside.
         assert_eq!(

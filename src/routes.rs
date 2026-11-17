@@ -723,7 +723,7 @@ fn groups(pts: &[LatLon], m: f64) -> Vec<usize> {
 type Named<'a> = (usize, &'a str, [Option<&'a str>; 2], [LatLon; 2]);
 
 /// A row per language, name and place (`SAME_M`). A ferry's names swap ends by majority of other units' names within
-/// `VOTE_M`; other languages also count the unit's plain names and follow them on a tie.
+/// `VOTE_M`, `from` and `to` counting double; other languages also count the unit's plain names and follow them on a tie.
 pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
     let mut named: Vec<Named> = Vec::new();
     for (u, unit) in units.iter().enumerate() {
@@ -737,27 +737,30 @@ pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
             }
         }
     }
-    let mut seen: FxHashMap<&str, Vec<(usize, LatLon)>> = FxHashMap::default();
-    for &(u, _, n, ends) in &named {
+    // Names, their ends and weights: `from` and `to` 2, a split `name` 1.
+    let mut seen: FxHashMap<&str, Vec<(usize, LatLon, usize)>> = FxHashMap::default();
+    for &(u, lang, n, ends) in &named {
+        let t = &units[u].tags[lang];
         for (s, at) in n.iter().zip(ends) {
             if let Some(s) = s {
-                seen.entry(s).or_default().push((u, at));
+                let w = 1 + (unlabel(&t.from) == *s || unlabel(&t.to) == *s) as usize;
+                seen.entry(s).or_default().push((u, at, w));
             }
         }
     }
-    // Units other than `u` naming `s` within `VOTE_M` of `at`, in any language.
+    // The weight of units other than `u` naming `s` within `VOTE_M` of `at`, in any language; a unit's highest.
     let votes = |u: usize, s: Option<&str>, at: LatLon| {
         let Some(s) = s else {
             return 0;
         };
         let proj = PlaneProjection::new(at.0);
-        let mut us: Vec<usize> = (seen[s].iter())
-            .filter(|&&(v, p)| v != u && proj.distance(at, p) <= VOTE_M)
-            .map(|&(v, _)| v)
+        let mut us: Vec<(usize, usize)> = (seen[s].iter())
+            .filter(|&&(v, p, _)| v != u && proj.distance(at, p) <= VOTE_M)
+            .map(|&(v, _, w)| (v, w))
             .collect();
-        us.sort_unstable();
-        us.dedup();
-        us.len()
+        us.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+        us.dedup_by_key(|v| v.0);
+        us.iter().map(|v| v.1).sum::<usize>()
     };
     let mut swapped = Vec::new();
     let mut mentions: BTreeMap<(&str, &str), Vec<(LatLon, usize)>> = BTreeMap::new();
@@ -1217,6 +1220,31 @@ mod tests {
                 [p(50.0), p(0.0)],
                 &[("from", "A"), ("to", "B")],
             ),
+            // One train's `from` and `to` outweigh two trains' split names: the ferry keeps its order.
+            unit(
+                Kind::Train,
+                10,
+                [p(2000.0), p(2100.0)],
+                &[("from", "M"), ("to", "N")],
+            ),
+            unit(
+                Kind::Train,
+                11,
+                [p(2000.0), p(2100.0)],
+                &[("name", "N - M")],
+            ),
+            unit(
+                Kind::Train,
+                12,
+                [p(2000.0), p(2100.0)],
+                &[("name", "N - M")],
+            ),
+            unit(
+                Kind::Ferry,
+                13,
+                [p(2000.2), p(2099.8)],
+                &[("name", "M - N")],
+            ),
         ];
         let (places, swapped) = places(&units);
         assert_eq!(swapped, [(2, ""), (2, "es")]);
@@ -1233,6 +1261,10 @@ mod tests {
                 ("", "B", p(50.0), ids("relation/1,relation/2,relation/3")),
                 ("", "C", p(100.0), ids("relation/4")),
                 ("", "D", p(120.0), ids("relation/4")),
+                ("", "M", p(2000.0), ids("relation/10,relation/13")),
+                ("", "M", p(2100.0), ids("relation/11,relation/12")),
+                ("", "N", p(2000.0), ids("relation/11,relation/12")),
+                ("", "N", p(2100.0), ids("relation/10,relation/13")),
                 ("es", "A", p(0.2), ids("relation/3")),
                 ("es", "Be", p(49.5), ids("relation/3")),
             ]

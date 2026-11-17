@@ -18,7 +18,7 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 32,442 rows, 9,312 of them in 92 languages beyond the plain tags.
+The 2026-11-09 planet gives 32,493 rows, 9,321 of them in 92 languages beyond the plain tags.
 
 ## Routes and ends
 
@@ -38,8 +38,8 @@ The 2026-11-09 planet gives 32,442 rows, 9,312 of them in 92 languages beyond th
   harbor, terminal, station, stop, boat, line, route, gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger).
 - "A (B)", "A/B": two names when each part has more than 3 letters. A lowercase or letterless "(b)" goes ("Tampa
   (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as tagged: "Alderney (GBG)".
-- Ferries: names swap ends when other routes name them more often within 5 km of the other end. Other languages also
-  count the plain names, and follow them on a tie.
+- Ferries: names swap ends when other routes name them more often within 5 km of the other end; `from` and `to` count
+  double. Other languages also count the plain names, and follow them on a tie.
 - One row per name and language within 1 km.
 
 ## Run

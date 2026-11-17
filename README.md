@@ -18,7 +18,7 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 28,353 rows, 8,177 of them in 88 languages beyond the plain tags.
+The 2026-11-09 planet gives 29,206 rows, 8,437 of them in 88 languages beyond the plain tags.
 
 ## Routes and ends
 
@@ -40,12 +40,6 @@ The 2026-11-09 planet gives 28,353 rows, 8,177 of them in 88 languages beyond th
   (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as tagged: "Alderney (GBG)".
 - Ferries: names swap ends when other routes name them more often within 5 km of the other end. Other languages also
   count the plain names, and follow them on a tie.
-- Trains, coaches: end stop names only check the route's names and are not written.
-  - Names swap ends when they match the stops crosswise.
-  - An end's name goes when its stop's name disagrees and no other route names it within 5 km: missing stops.
-  - Stop names of generic words ("station", "peron": words in 10 or more 0.1° cells) and platform numbers say nothing.
-  - An unnamed stop takes its platform's name within 1 km.
-  - Names match on a word, by its first 5 letters or a prefix: "Göteborgs central", "Göteborg C"; "長津田駅", "長津田".
 - One row per name and language within 1 km.
 
 ## Run

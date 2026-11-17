@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use clap::Parser;
-use coords::{Bits, Coords};
+use coords::Coords;
 use pbf::Blobs;
-use routes::{Drop, Kind, LONG, RelKind};
+use routes::{Drop, Kind, RelKind};
+use rustc_hash::FxHashSet;
 
 mod coords;
 mod pbf;
@@ -17,7 +18,7 @@ struct Config {
     /// OSM PBF sorted by type then id, as the planet is.
     #[arg(long)]
     pbf: PathBuf,
-    /// Output directory for the TSVs.
+    /// Output directory for termini.tsv.
     #[arg(long, default_value = "data")]
     out: PathBuf,
 }
@@ -31,7 +32,7 @@ fn main() {
     let blobs = Blobs::open(&pbf).expect("read pbf");
     tm.lap("blob index", format!("{} blobs", blobs.len()));
 
-    let (rels, bus) = routes::relations(&blobs);
+    let rels = routes::relations(&blobs);
     let n_rel = |k: RelKind| rels.iter().filter(|r| r.kind == k).count();
     tm.lap(
         "relations",
@@ -46,11 +47,10 @@ fn main() {
         ),
     );
 
-    let member_ways = |kinds: &[RelKind]| {
-        let ids: Vec<i64> = (rels.iter().filter(|r| kinds.contains(&r.kind)))
+    let member_ways = |kinds: &[RelKind]| -> FxHashSet<i64> {
+        (rels.iter().filter(|r| kinds.contains(&r.kind)))
             .flat_map(|r| r.members.iter().filter(|m| m.ty == 'w').map(|m| m.id))
-            .collect();
-        Bits::new(ids.into_iter())
+            .collect()
     };
     let ways = routes::ways(
         &blobs,
@@ -87,13 +87,13 @@ fn main() {
         format!("{} needed, {} found", coords.len(), coords.found()),
     );
 
-    let x = routes::extract(&rels, &ways, |n| coords.get(n));
-    let (places, swapped) = routes::places(&x.units);
+    let units = routes::extract(&rels, &ways, |n| coords.get(n));
+    let (places, swapped) = routes::places(&units);
     tm.lap(
         "units, places",
         format!(
             "{} units, {} places, {} ferry name pairs swapped",
-            x.units.len(),
+            units.len(),
             places.len(),
             swapped.len()
         ),
@@ -119,8 +119,7 @@ fn main() {
         println!("{l}");
     }
     println!("\ntotal {:.0} s\n", all.elapsed().as_secs_f64());
-    report(&x, &places, &swapped);
-    coach(&bus);
+    report(&units, &places, &swapped);
 }
 
 fn field(s: &str) -> String {
@@ -141,8 +140,8 @@ impl Timer {
     }
 }
 
-fn report(x: &routes::Extract, places: &[routes::Place], swapped: &[(usize, &str)]) {
-    let drops = routes::drops(&x.units);
+fn report(units: &[routes::Unit], places: &[routes::Place], swapped: &[(usize, &str)]) {
+    let drops = routes::drops(units);
     let mut head = String::from("| kind | OSM units |");
     for d in Drop::ALL {
         let _ = write!(head, " {} |", d.code());
@@ -170,31 +169,10 @@ fn report(x: &routes::Extract, places: &[routes::Place], swapped: &[(usize, &str
         langs.len() - langs.contains("") as usize,
         swapped.len(),
         (swapped.iter().take(10))
-            .map(|&(u, lang)| format!("{} {lang}", x.units[u].osm_id())
+            .map(|&(u, lang)| format!("{} {lang}", units[u].osm_id())
                 .trim_end()
                 .to_string())
             .collect::<Vec<_>>()
             .join(", ")
     );
-}
-
-fn coach(bus: &routes::Bus) {
-    println!(
-        "type=route + route=bus relations: {}; flix in operator or network: {}; route=coach relations (any type): {}, \
-         of them flix: {}",
-        bus.all, bus.flix, bus.coach_route, bus.coach_route_flix
-    );
-    let tags: Vec<String> = (0..LONG.len())
-        .map(|i| format!("{}={} {}", LONG[i].0, LONG[i].1, bus.by_tag[i]))
-        .collect();
-    println!(
-        "with a coach or long-distance tag: {} ({})\n",
-        bus.long,
-        tags.join(", ")
-    );
-    println!("| operator | relations |\n|---|---|");
-    for (op, n) in bus.top(20) {
-        let op = if op.is_empty() { "(none)" } else { op };
-        println!("| {} | {n} |", op.replace('|', "\\|"));
-    }
 }

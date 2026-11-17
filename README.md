@@ -18,12 +18,12 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 32,493 rows, 9,321 of them in 92 languages beyond the plain tags.
+The 2026-11-09 planet gives 31,920 rows, 9,277 of them in 92 languages beyond the plain tags.
 
 ## Routes and ends
 
 - Ferries, shuttle trains: `type=route` relations with `route=ferry` or `route=shuttle_train`, and such ways, relation
-  members too. Ends: the first way's first node, the last way's last node.
+  members too. Ends: the tips of the first and last way away from the rest of the path.
 - Trains: PTv2 `route=train` relations. Coaches: PTv2 `route=bus` relations with "flix" in `operator` or `network`.
   Ends: the first and last `stop` member, else stop or platform member; platforms may follow all the stops.
 
@@ -39,7 +39,8 @@ The 2026-11-09 planet gives 32,493 rows, 9,321 of them in 92 languages beyond th
 - "A (B)", "A/B": two names when each part has more than 3 letters. A lowercase or letterless "(b)" goes ("Tampa
   (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as tagged: "Alderney (GBG)".
 - Ferries: names swap ends when other routes name them more often within 5 km of the other end; `from` and `to` count
-  double. Other languages also count the plain names, and follow them on a tie.
+  double, a relation and its ways do not vote for each other. Other languages also count the plain names, and follow
+  them on a tie.
 - One row per name and language within 1 km.
 
 ## Run

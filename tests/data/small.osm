@@ -10,7 +10,7 @@
   <!-- way 102: shuttle train -->
   <node id="6" lat="51.0900000" lon="1.1400000"/>
   <node id="7" lat="50.9300000" lon="1.8100000"/>
-  <!-- relation 302: ferry over way 104, untagged, and way 105, named the other way round -->
+  <!-- relation 302: ferry over way 104, unnamed, and way 105, a leg from Ajaccio -->
   <node id="14" lat="42.6700000" lon="8.9000000"/>
   <node id="15" lat="41.9200000" lon="8.7400000"/>
   <node id="16" lat="43.3000000" lon="5.3600000"/>

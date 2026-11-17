@@ -5,27 +5,6 @@ use crate::pbf::Blobs;
 /// (lat, lon) in degrees.
 pub type LatLon = (f64, f64);
 
-pub struct Bits(Vec<u64>);
-
-impl Bits {
-    pub fn new(ids: impl Iterator<Item = i64> + Clone) -> Self {
-        let max = ids.clone().max().unwrap_or(0).max(0) as usize;
-        let mut v = vec![0u64; max / 64 + 1];
-        for id in ids.filter(|&i| i >= 0) {
-            v[id as usize / 64] |= 1 << (id as usize % 64);
-        }
-        Bits(v)
-    }
-
-    pub fn has(&self, id: i64) -> bool {
-        id >= 0
-            && self
-                .0
-                .get(id as usize / 64)
-                .is_some_and(|w| w & (1 << (id as usize % 64)) != 0)
-    }
-}
-
 /// Node coordinates by id: lat, lon in 1e-7°, packed; `MISSING` until the node pass fills it.
 pub struct Coords {
     ids: Vec<i64>,
@@ -56,7 +35,6 @@ impl Coords {
             .count()
     }
 
-    /// (lat, lon) in degrees.
     pub fn get(&self, id: i64) -> Option<(f64, f64)> {
         let i = self.ids.binary_search(&id).ok()?;
         let v = self.packed[i].load(Ordering::Relaxed);
@@ -103,11 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bits_and_coords() {
-        let b = Bits::new([3, 64, 1000].into_iter());
-        assert!(b.has(3) && b.has(64) && b.has(1000));
-        assert!(!b.has(4) && !b.has(-1) && !b.has(5000));
-
+    fn coords_fill_wanted_ids_only() {
         let c = Coords::new(vec![2, 5, 9]);
         let mut k = None;
         for (id, lat) in [(1, 10), (2, 20), (5, 50), (7, 70), (9, 90)] {

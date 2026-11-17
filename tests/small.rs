@@ -1,10 +1,11 @@
-//! `data/small.osm.pbf` is `osmium cat data/small.osm -o data/small.osm.pbf` of the hand-written fixture.
+//! `tests/data/small.osm.pbf` is `osmium cat tests/data/small.osm -o tests/data/small.osm.pbf -O` of the hand-written
+//! fixture.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 #[test]
-fn small_planet() {
+fn small_fixture_rows() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("small");
     let _ = std::fs::remove_dir_all(&out);

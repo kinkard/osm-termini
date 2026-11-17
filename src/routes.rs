@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use osmpbf::RelMemberType;
 use plane_projection::PlaneProjection;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::coords::{Bits, LatLon};
+use crate::coords::LatLon;
 use crate::pbf::Blobs;
 
-/// Metres within which a unit's two ends make a loop.
+/// Metres within which a train's or coach's two ends make a loop.
 pub const LOOP_M: f64 = 50.0;
 /// Metres within which the same name in the same language is one place.
 pub const SAME_M: f64 = 1000.0;
@@ -80,15 +80,6 @@ pub const ROUTE_WORDS: [&str; 22] = [
     "phà",
     "đò",
     "tàu",
-];
-
-/// Tags that mark a `route=bus` relation as a coach or long-distance route, for the operator list.
-pub const LONG: [(&str, &str); 5] = [
-    ("bus", "coach"),
-    ("coach", "yes"),
-    ("bus", "long_distance"),
-    ("bus", "long-distance"),
-    ("service", "long_distance"),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -169,9 +160,6 @@ struct RelTags<'a> {
     route: &'a str,
     v2: bool,
     flix: bool,
-    operator: &'a str,
-    /// Indices into `LONG` of the tags it carries.
-    long: Vec<usize>,
 }
 
 fn rel_tags<'a>(tags: impl Iterator<Item = (&'a str, &'a str)>) -> RelTags<'a> {
@@ -181,16 +169,9 @@ fn rel_tags<'a>(tags: impl Iterator<Item = (&'a str, &'a str)>) -> RelTags<'a> {
             "type" => t.ty = v,
             "route" => t.route = v,
             "public_transport:version" => t.v2 = v == "2",
-            "operator" | "network" => {
-                t.flix |= v.to_lowercase().contains("flix");
-                if k == "operator" {
-                    t.operator = v.trim();
-                }
-            }
+            "operator" | "network" => t.flix |= v.to_lowercase().contains("flix"),
             _ => {}
         }
-        t.long
-            .extend((0..LONG.len()).filter(|&i| LONG[i] == (k, v)));
     }
     t
 }
@@ -235,75 +216,13 @@ pub struct Rel {
     pub members: Vec<Member>,
 }
 
-/// `type=route` + `route=bus` relations by tags, for the coach operator list.
-#[derive(Debug, Default)]
-pub struct Bus {
-    pub all: usize,
-    /// "flix" in `operator` or `network`.
-    pub flix: usize,
-    /// Relations with a `LONG` tag, and how many carry each.
-    pub long: usize,
-    pub by_tag: [usize; LONG.len()],
-    /// `operator` values of the relations with a `LONG` tag; "" for none.
-    pub operators: FxHashMap<String, usize>,
-    /// `route=coach` relations (any `type`), and of them with "flix".
-    pub coach_route: usize,
-    pub coach_route_flix: usize,
-}
-
-impl Bus {
-    fn add(&mut self, t: &RelTags) {
-        if t.route == "coach" {
-            self.coach_route += 1;
-            self.coach_route_flix += t.flix as usize;
-        }
-        if t.ty != "route" || t.route != "bus" {
-            return;
-        }
-        self.all += 1;
-        self.flix += t.flix as usize;
-        if t.long.is_empty() {
-            return;
-        }
-        self.long += 1;
-        let mut long = t.long.clone();
-        long.dedup();
-        long.iter().for_each(|&i| self.by_tag[i] += 1);
-        *self.operators.entry(t.operator.to_string()).or_default() += 1;
-    }
-
-    fn extend(&mut self, o: Bus) {
-        self.all += o.all;
-        self.flix += o.flix;
-        self.long += o.long;
-        (0..LONG.len()).for_each(|i| self.by_tag[i] += o.by_tag[i]);
-        for (k, v) in o.operators {
-            *self.operators.entry(k).or_default() += v;
-        }
-        self.coach_route += o.coach_route;
-        self.coach_route_flix += o.coach_route_flix;
-    }
-
-    /// The `n` most frequent operators, ties by name.
-    pub fn top(&self, n: usize) -> Vec<(&str, usize)> {
-        let mut v: Vec<(&str, usize)> = (self.operators.iter())
-            .map(|(k, &c)| (k.as_str(), c))
-            .collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-        v.truncate(n);
-        v
-    }
-}
-
-/// Pass 1: ferry, shuttle, train and flix bus relations, in id order; the bus tag counts.
-pub fn relations(blobs: &Blobs) -> (Vec<Rel>, Bus) {
+/// Pass 1: ferry, shuttle, train and flix bus relations, in id order.
+pub fn relations(blobs: &Blobs) -> Vec<Rel> {
     let per_block = blobs.par_map(blobs.relations_range(), |b| {
-        let (mut out, mut bus) = (Vec::new(), Bus::default());
+        let mut out = Vec::new();
         for g in b.groups() {
             for r in g.relations() {
-                let t = rel_tags(r.tags());
-                bus.add(&t);
-                let Some(kind) = rel_kind(&t) else {
+                let Some(kind) = rel_kind(&rel_tags(r.tags())) else {
                     continue;
                 };
                 let members = r.members().filter_map(|m| {
@@ -330,15 +249,9 @@ pub fn relations(blobs: &Blobs) -> (Vec<Rel>, Bus) {
                 });
             }
         }
-        (out, bus)
+        out
     });
-    let (mut rels, mut bus) = (Vec::new(), Bus::default());
-    for (r, b) in per_block {
-        rels.extend(r);
-        bus.extend(b);
-    }
-    rels.dedup_by_key(|r| r.id);
-    (rels, bus)
+    per_block.into_iter().flatten().collect()
 }
 
 /// `route=ferry` a ferry, `route=shuttle_train` a train; raw tags, as UTF-8 checks of every way's tags are costly.
@@ -372,7 +285,7 @@ pub struct Ways {
 }
 
 /// Pass 2; `path`, `stops`: the relation member ways wanted.
-pub fn ways(blobs: &Blobs, path: &Bits, stops: &Bits) -> Ways {
+pub fn ways(blobs: &Blobs, path: &FxHashSet<i64>, stops: &FxHashSet<i64>) -> Ways {
     let per_block = blobs.par_map(blobs.ways_range(), |b| {
         let mut out = Ways::default();
         for g in b.groups() {
@@ -381,7 +294,7 @@ pub fn ways(blobs: &Blobs, path: &Bits, stops: &Bits) -> Ways {
                 let st = w.raw_stringtable();
                 let kind =
                     route_kind((w.raw_tags()).map(|(k, v)| (&st[k as usize], &st[v as usize])));
-                if kind.is_some() || path.has(id) {
+                if kind.is_some() || path.contains(&id) {
                     out.path.push(Way {
                         id,
                         kind,
@@ -389,7 +302,7 @@ pub fn ways(blobs: &Blobs, path: &Bits, stops: &Bits) -> Ways {
                         refs: w.refs().collect(),
                     });
                 }
-                if stops.has(id)
+                if stops.contains(&id)
                     && let Some(n) = w.refs().next()
                 {
                     out.first.push((id, n));
@@ -403,8 +316,6 @@ pub fn ways(blobs: &Blobs, path: &Bits, stops: &Bits) -> Ways {
         out.path.extend(w.path);
         out.first.extend(w.first);
     }
-    out.path.dedup_by_key(|w| w.id);
-    out.first.dedup_by_key(|f| f.0);
     out
 }
 
@@ -491,10 +402,11 @@ fn split_outside<'a>(name: &'a str, sep: &str) -> Option<[&'a str; 2]> {
 }
 
 /// The first and last part of a name split outside brackets at the first of `SEPS` it holds there, else of its trailing
-/// bracket: "JR Kyoto Line (Osaka - Kyoto)"; trimmed, `None` when one is empty. A label before a colon is cut first, as
-/// it may hold a separator: "AREX - Todas las paradas: Seoul → Incheon".
+/// bracket: "JR Kyoto Line (Osaka - Kyoto)"; trimmed, `None` when one is empty. A label before a colon goes first, as it
+/// may hold a separator: "AREX - Todas las paradas: Seoul → Incheon"; so does a remark after a colon: "Gedser: 2h".
 pub fn split_name(name: &str) -> Option<[&str; 2]> {
-    if let Some((_, rest)) = name.rsplit_once([':', '：'])
+    const COLON: [char; 2] = [':', '：'];
+    if let Some((_, rest)) = name.split_once(COLON)
         && let Some(parts) = split_name(rest)
     {
         return Some(parts);
@@ -502,7 +414,8 @@ pub fn split_name(name: &str) -> Option<[&str; 2]> {
     let Some([a, b]) = SEPS.iter().find_map(|sep| split_outside(name, sep)) else {
         return split_name(trailing(name)?.1);
     };
-    let (a, b) = (a.trim(), b.trim());
+    let a = a.rsplit_once(COLON).map_or(a, |(_, a)| a).trim();
+    let b = b.split_once(COLON).map_or(b, |(b, _)| b).trim();
     (!a.is_empty() && !b.is_empty()).then_some([a, b])
 }
 
@@ -553,7 +466,7 @@ fn place(s: &str) -> bool {
 
 /// The names a tagged name holds: "A (B)" and "A/B" are "A" and "B" when each part is a `place` of more than 3 letters;
 /// a lowercase or letterless "(b)" and a generic "A" are no names: "Tampa (seasonal)", "Zachodni (11)", "Wharf (Bhaucha
-/// Dhakka)"; else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
+/// Dhakka)", "(on request)"; else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
 pub fn parts(name: &str) -> Vec<&str> {
     let ok = |s: &str| place(s) && s.chars().filter(|c| c.is_alphabetic()).count() > 3;
     if let Some((outer, inner)) = trailing(name) {
@@ -562,6 +475,7 @@ pub fn parts(name: &str) -> Vec<&str> {
             (true, true) => return [parts(outer), parts(inner)].concat(),
             (true, false) if lower || !place(inner) => return parts(outer),
             (false, true) if !place(outer) => return parts(inner),
+            (false, false) if !place(outer) => return Vec::new(),
             _ => {}
         }
     }
@@ -598,6 +512,8 @@ pub struct Unit {
     pub id: i64,
     pub tags: Langs,
     pub ends: Result<[LatLon; 2], Drop>,
+    /// The ferry and shuttle relations it is or belongs to; their units do not vote for each other.
+    pub rels: Vec<i64>,
 }
 
 impl Unit {
@@ -611,20 +527,29 @@ impl Unit {
     }
 }
 
-/// Every OSM unit: ferry and shuttle relations, then ferry and shuttle ways, then train
-/// relations, then coach relations; each in id order.
-pub struct Extract {
-    pub units: Vec<Unit>,
-}
-
-/// Ends and drops of every unit from the passes' output; `at` a node's (lat, lon).
-pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) -> Extract {
+/// Every OSM unit from the passes' output, its ends or drop: ferry and shuttle relations, then ferry and shuttle ways, then
+/// train relations, then coach relations; each in id order. `at` is a node's (lat, lon).
+pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) -> Vec<Unit> {
     let way_of: FxHashMap<i64, &Way> = ways.path.iter().map(|w| (w.id, w)).collect();
-    // A path's first way's first node and its last way's last node.
+    let tips = |w: &Way| Some([*w.refs.first()?, *w.refs.last()?]);
+    // A way's tip away from its neighbour on the path, else its `i`th: ways may run against the route.
+    let outer = |w: &Way, next: Option<&&Way>, i: usize| {
+        let t = tips(w)?;
+        let shared = |n: usize| {
+            next.and_then(|n| tips(n))
+                .is_some_and(|nt| nt.contains(&t[n]))
+        };
+        Some(match (shared(0), shared(1)) {
+            (true, false) => t[1],
+            (false, true) => t[0],
+            _ => t[i],
+        })
+    };
     let path_ends = |ws: &[&Way]| {
-        let a = ws.first().and_then(|w| w.refs.first());
-        let b = ws.last().and_then(|w| w.refs.last());
-        let (Some(&a), Some(&b)) = (a, b) else {
+        let a = ws.first().and_then(|w| outer(w, ws.get(1), 0));
+        let b =
+            (ws.last()).and_then(|w| outer(w, ws.len().checked_sub(2).and_then(|i| ws.get(i)), 1));
+        let (Some(a), Some(b)) = (a, b) else {
             return Err(Drop::Ends);
         };
         match (at(a), at(b)) {
@@ -633,10 +558,14 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
         }
     };
     let mut units = Vec::new();
+    let mut held: FxHashMap<i64, Vec<i64>> = FxHashMap::default();
     for r in rels
         .iter()
         .filter(|r| matches!(r.kind, RelKind::Ferry | RelKind::Shuttle))
     {
+        for m in &r.members {
+            held.entry(m.id).or_default().push(r.id);
+        }
         let path: Vec<&Way> = (r.members.iter())
             .filter_map(|m| way_of.get(&m.id).copied())
             .collect();
@@ -649,6 +578,7 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
             id: r.id,
             tags: r.tags.clone(),
             ends: path_ends(&path),
+            rels: vec![r.id],
         });
     }
     // Relations' ferry and shuttle ways too: a leg names its own two piers.
@@ -662,6 +592,7 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
             id: w.id,
             tags: w.tags.clone(),
             ends: path_ends(&[w]),
+            rels: held.get(&w.id).cloned().unwrap_or_default(),
         });
     }
     let first = |id: i64| {
@@ -686,10 +617,11 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
                     true => stop_ends(&r.members, stop_at),
                     false => Err(Drop::Version),
                 },
+                rels: Vec::new(),
             });
         }
     }
-    Extract { units }
+    units
 }
 
 /// A name at a place: the point of its first mention, and the units that name it there.
@@ -722,7 +654,7 @@ fn groups(pts: &[LatLon], m: f64) -> Vec<usize> {
 /// A kept unit's names in one language: unit, language, the names of its ends, its ends.
 type Named<'a> = (usize, &'a str, [Option<&'a str>; 2], [LatLon; 2]);
 
-/// A row per language, name and place (`SAME_M`). A ferry's names swap ends by majority of other units' names within
+/// A row per language, name and place (`SAME_M`). A ferry's names swap ends by majority of other routes' names within
 /// `VOTE_M`, `from` and `to` counting double; other languages also count the unit's plain names and follow them on a tie.
 pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
     let mut named: Vec<Named> = Vec::new();
@@ -748,14 +680,16 @@ pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
             }
         }
     }
-    // The weight of units other than `u` naming `s` within `VOTE_M` of `at`, in any language; a unit's highest.
+    let apart =
+        |u: usize, v: usize| v != u && !units[u].rels.iter().any(|r| units[v].rels.contains(r));
+    // The weight of units apart from `u` naming `s` within `VOTE_M` of `at`, in any language; a unit's highest.
     let votes = |u: usize, s: Option<&str>, at: LatLon| {
         let Some(s) = s else {
             return 0;
         };
         let proj = PlaneProjection::new(at.0);
         let mut us: Vec<(usize, usize)> = (seen[s].iter())
-            .filter(|&&(v, p, _)| v != u && proj.distance(at, p) <= VOTE_M)
+            .filter(|&&(v, p, _)| apart(u, v) && proj.distance(at, p) <= VOTE_M)
             .map(|&(v, _, w)| (v, w))
             .collect();
         us.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
@@ -844,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn way_units() {
+    fn units_of_ferry_relations_and_ways() {
         let way = |id: i64, kind: Option<Kind>, refs: &[i64]| Way {
             id,
             kind,
@@ -864,19 +798,29 @@ mod tests {
                 way(5, None, &[14, 15]),
                 named(way(6, Some(Kind::Ferry), &[15, 16]), "A - C"),
                 named(way(20, Some(Kind::Ferry), &[16, 17]), "B - C"),
+                way(22, None, &[31, 30]),
+                way(23, None, &[31, 32]),
+                way(25, None, &[40, 41]),
+                way(26, None, &[42, 41]),
             ],
             ..Ways::default()
         };
         let at = |n: i64| (n < 99).then(|| north((n - 10) as f64 * 1000.0));
-        // Relation 7 runs over an untagged way and two ferry ways, units too; relation 8 has none of its ways.
+        // Relation 7 runs over an untagged way and two ferry ways, units too; relation 8 has none of its ways; relations
+        // 21 and 24 have a first and a last way drawn against the route.
         let rel = |id: i64, ways: &[i64]| Rel {
             id,
             kind: RelKind::Ferry,
             tags: read_langs([("name", "A - C")].into_iter()),
             members: ways.iter().map(|&w| Member::new('w', w, "")).collect(),
         };
-        let rels = [rel(7, &[5, 6, 20]), rel(8, &[9])];
-        let got: Vec<(Kind, String, Result<[LatLon; 2], Drop>)> = (extract(&rels, &ways, at).units)
+        let rels = [
+            rel(7, &[5, 6, 20]),
+            rel(8, &[9]),
+            rel(21, &[22, 23]),
+            rel(24, &[25, 26]),
+        ];
+        let got: Vec<(Kind, String, Result<[LatLon; 2], Drop>)> = (extract(&rels, &ways, at))
             .into_iter()
             .map(|u| (u.kind, u.osm_id(), u.ends))
             .collect();
@@ -889,6 +833,16 @@ mod tests {
                     Ok([north(4000.0), north(7000.0)])
                 ),
                 (Kind::Ferry, "relation/8".into(), Err(Drop::Ends)),
+                (
+                    Kind::Ferry,
+                    "relation/21".into(),
+                    Ok([north(20000.0), north(22000.0)])
+                ),
+                (
+                    Kind::Ferry,
+                    "relation/24".into(),
+                    Ok([north(30000.0), north(32000.0)])
+                ),
                 (Kind::Ferry, "way/1".into(), Ok([north(0.0), north(2000.0)])),
                 (Kind::Ferry, "way/2".into(), Ok([north(0.0), north(0.0)]),),
                 (
@@ -909,7 +863,10 @@ mod tests {
                 ),
             ]
         );
+    }
 
+    #[test]
+    fn route_kind_from_route_tag() {
         assert_eq!(
             route_kind([("name", "X"), ("route", "ferry")]),
             Some(Kind::Ferry)
@@ -920,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_end_rule() {
+    fn train_and_coach_ends_prefer_stop_members() {
         let m = |ty: char, id: i64, role: &str| Member::new(ty, id, role);
         let at: FxHashMap<(char, i64), LatLon> = [
             (('n', 1), north(0.0)),
@@ -955,7 +912,10 @@ mod tests {
             ends(&[m('n', 1, ""), m('n', 3, "station")]),
             Err(Drop::Ends)
         );
+    }
 
+    #[test]
+    fn rel_kind_from_type_route_ptv2_and_flix() {
         let kind = |tags: &[(&str, &str)]| rel_kind(&rel_tags(tags.iter().copied()));
         let (route, v2) = (("type", "route"), ("public_transport:version", "2"));
         assert_eq!(kind(&[route, ("route", "train"), v2]), Some(RelKind::Train));
@@ -989,26 +949,10 @@ mod tests {
             kind(&[("type", "route_master"), bus, v2, ("network", "Flixbus")]),
             None
         );
-
-        let t = rel_tags(
-            [
-                route,
-                bus,
-                ("bus", "coach"),
-                ("service", "long_distance"),
-                ("operator", " Ouibus "),
-            ]
-            .into_iter(),
-        );
-        let mut b = Bus::default();
-        b.add(&t);
-        b.add(&rel_tags([route, bus, ("operator", "Ouibus")].into_iter()));
-        assert_eq!((b.all, b.long, b.by_tag), (2, 1, [1, 0, 0, 0, 1]));
-        assert_eq!(b.top(5), [("Ouibus", 1)]);
     }
 
     #[test]
-    fn name_split_rule() {
+    fn split_name_outside_brackets_at_first_separator() {
         assert_eq!(split_name("Rostock - Gedser"), Some(["Rostock", "Gedser"]));
         assert_eq!(
             split_name("A – B – C"),
@@ -1025,8 +969,11 @@ mod tests {
         );
         assert_eq!(
             split_name("Rostock - Gedser: 2h"),
-            Some(["Rostock", "Gedser: 2h"]),
-            "nothing splits after the colon"
+            Some(["Rostock", "Gedser"])
+        );
+        assert_eq!(
+            split_name("Flixbus 1: Paris - Lyon: 2h"),
+            Some(["Paris", "Lyon"])
         );
         // Not inside brackets; the trailing bracket's parts when nothing splits outside.
         assert_eq!(
@@ -1056,7 +1003,7 @@ mod tests {
     }
 
     #[test]
-    fn unlabel_rule() {
+    fn unlabel_drops_route_labels() {
         let cases = [
             (
                 "Flixbus 718: Toulon, Gare routière",
@@ -1098,7 +1045,7 @@ mod tests {
     }
 
     #[test]
-    fn parts_rule() {
+    fn parts_of_brackets_and_slashes() {
         assert_eq!(parts("Achele (Murnau)"), ["Achele", "Murnau"]);
         assert_eq!(
             parts("Addax/Sandfill/Maroko (Victoria Island)"),
@@ -1122,12 +1069,12 @@ mod tests {
         assert_eq!(parts("Novalja (Pag)"), ["Novalja (Pag)"], "a short name");
         assert_eq!(parts("St Martin's (low tide)"), ["St Martin's"]);
         assert_eq!(parts("Wharf (Bhaucha Dhakka)"), ["Bhaucha Dhakka"]);
-        assert_eq!(parts("(on request)"), ["(on request)"]);
+        assert!(parts("(on request)").is_empty());
         assert_eq!(parts("Komiža (Vis (Otok))"), ["Komiža", "Vis (Otok)"]);
     }
 
     #[test]
-    fn end_names_rule() {
+    fn end_names_from_from_to_or_name() {
         let names = |name: &str, from: &str, to: &str| {
             let t = tags(name, from, to);
             end_names(&t).map(|n| n.map(str::to_string))
@@ -1161,7 +1108,10 @@ mod tests {
             names("Dublin Bay Ferry (Dún Laoghaire - Howth)", "", ""),
             [some("Dún Laoghaire"), some("Howth")]
         );
+    }
 
+    #[test]
+    fn read_langs_keeps_language_suffixes_only() {
         let langs = read_langs(
             [
                 ("name", "Propriano - Marseille"),
@@ -1177,7 +1127,7 @@ mod tests {
     }
 
     #[test]
-    fn places_rule() {
+    fn places_vote_and_merge() {
         let p = |km: f64| (54.0 + km / 111.195, 11.0);
         let unit = |kind: Kind, id: i64, ends: [LatLon; 2], tags: &[(&str, &str)]| Unit {
             kind,
@@ -1185,6 +1135,12 @@ mod tests {
             id,
             tags: read_langs(tags.iter().copied()),
             ends: Ok(ends),
+            rels: Vec::new(),
+        };
+        let held = |mut u: Unit, ty: char, rel: i64| {
+            u.osm_type = ty;
+            u.rels = vec![rel];
+            u
         };
         let units = [
             // Two trains put "A" at 0 km and "B" at 50 km.
@@ -1220,7 +1176,7 @@ mod tests {
                 [p(50.0), p(0.0)],
                 &[("from", "A"), ("to", "B")],
             ),
-            // One train's `from` and `to` outweigh two trains' split names: the ferry keeps its order.
+            // One train's `from` and `to` weigh as much as two trains' split names: the ferry keeps its order.
             unit(
                 Kind::Train,
                 10,
@@ -1245,9 +1201,37 @@ mod tests {
                 [p(2000.2), p(2099.8)],
                 &[("name", "M - N")],
             ),
+            // A relation and its way, both named the wrong way round, do not vote for each other: the train swaps
+            // both.
+            held(
+                unit(
+                    Kind::Ferry,
+                    30,
+                    [p(3000.0), p(3100.0)],
+                    &[("name", "Y - X")],
+                ),
+                'r',
+                30,
+            ),
+            held(
+                unit(
+                    Kind::Ferry,
+                    31,
+                    [p(3000.0), p(3100.0)],
+                    &[("name", "Y - X")],
+                ),
+                'w',
+                30,
+            ),
+            unit(
+                Kind::Train,
+                32,
+                [p(3000.0), p(3100.0)],
+                &[("name", "X - Y")],
+            ),
         ];
         let (places, swapped) = places(&units);
-        assert_eq!(swapped, [(2, ""), (2, "es")]);
+        assert_eq!(swapped, [(2, ""), (2, "es"), (9, ""), (10, "")]);
         let got: Vec<(&str, &str, LatLon, String)> = (places.iter())
             .map(|q| (q.lang.as_str(), q.name.as_str(), q.at, q.ids.join(",")))
             .collect();
@@ -1265,6 +1249,8 @@ mod tests {
                 ("", "M", p(2100.0), ids("relation/11,relation/12")),
                 ("", "N", p(2000.0), ids("relation/11,relation/12")),
                 ("", "N", p(2100.0), ids("relation/10,relation/13")),
+                ("", "X", p(3000.0), ids("relation/30,relation/32,way/31")),
+                ("", "Y", p(3100.0), ids("relation/30,relation/32,way/31")),
                 ("es", "A", p(0.2), ids("relation/3")),
                 ("es", "Be", p(49.5), ids("relation/3")),
             ]

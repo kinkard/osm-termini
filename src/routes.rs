@@ -1,10 +1,8 @@
-//! Ferry, train and coach routes from a sorted planet PBF: OSM units and their two ends, units merged into routes by
-//! their ends, two names per route.
-
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use osmpbf::RelMemberType;
 use plane_projection::PlaneProjection;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::coords::Bits;
 use crate::pbf::Blobs;
@@ -58,7 +56,6 @@ impl Kind {
     }
 }
 
-/// The tags a unit keeps.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Tags {
     pub name: String,
@@ -81,7 +78,6 @@ impl Tags {
     }
 }
 
-/// What a relation is to this extraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelKind {
     /// `type=route` + `route=ferry`.
@@ -98,7 +94,6 @@ pub enum RelKind {
     Terminal,
 }
 
-/// One scan of a relation's tags.
 #[derive(Debug, Default)]
 struct RelTags<'a> {
     ty: &'a str,
@@ -187,7 +182,7 @@ pub struct Bus {
     pub long: usize,
     pub by_tag: [usize; LONG.len()],
     /// `operator` values of the relations with a `LONG` tag; "" for none.
-    pub operators: HashMap<String, usize>,
+    pub operators: FxHashMap<String, usize>,
     /// `route=coach` relations (any `type`), and of them with "flix".
     pub coach_route: usize,
     pub coach_route_flix: usize,
@@ -299,7 +294,7 @@ pub struct Ways {
     pub first: Vec<(i64, i64)>,
 }
 
-/// Pass 2: the ways of `Ways`; `ferry`, `terminal`, `stops` the member ways wanted.
+/// Pass 2; `ferry`, `terminal`, `stops`: the relation member ways wanted.
 pub fn ways(blobs: &Blobs, ferry: &Bits, terminal: &Bits, stops: &Bits) -> Ways {
     let per_block = blobs.par_map(blobs.ways_range(), |b| {
         let mut out = Ways::default();
@@ -360,8 +355,8 @@ pub fn terminal_rings(rels: &[Rel], ways: &Ways) -> (Vec<Terminal>, usize) {
 }
 
 /// Distinct ferry ways holding each of `nodes`.
-pub fn held(ways: &[Way], nodes: impl Iterator<Item = i64>) -> HashMap<i64, u32> {
-    let mut held: HashMap<i64, (u32, usize)> = nodes.map(|n| (n, (0, usize::MAX))).collect();
+pub fn held(ways: &[Way], nodes: impl Iterator<Item = i64>) -> FxHashMap<i64, u32> {
+    let mut held: FxHashMap<i64, (u32, usize)> = nodes.map(|n| (n, (0, usize::MAX))).collect();
     for (i, w) in ways.iter().enumerate() {
         for n in &w.refs {
             if let Some(h) = held.get_mut(n)
@@ -402,7 +397,7 @@ pub fn landings(pts: &[LatLon], m: f64) -> Vec<LatLon> {
             }
         }
     }
-    let mut seen = HashSet::new();
+    let mut seen = FxHashSet::default();
     (0..pts.len())
         .filter(|&i| seen.insert(group[i]))
         .map(|i| pts[i])
@@ -568,7 +563,6 @@ pub struct Unit {
 }
 
 impl Unit {
-    /// `relation/123`, `way/456`.
     pub fn osm_id(&self) -> String {
         let ty = if self.osm_type == 'r' {
             "relation"
@@ -596,7 +590,7 @@ pub fn extract(
     terminals: &Terminals,
     at: impl Fn(i64) -> Option<LatLon>,
 ) -> Extract {
-    let way_of: HashMap<i64, usize> = (ways.ferry.iter().enumerate())
+    let way_of: FxHashMap<i64, usize> = (ways.ferry.iter().enumerate())
         .map(|(i, w)| (w.id, i))
         .collect();
     let ferry_rels: Vec<&Rel> = rels.iter().filter(|r| r.kind == RelKind::Ferry).collect();
@@ -608,7 +602,7 @@ pub fn extract(
                 .collect()
         })
         .collect();
-    let members: HashSet<i64> = (ferry_rels.iter())
+    let members: FxHashSet<i64> = (ferry_rels.iter())
         .flat_map(|r| r.members.iter().map(|m| m.id))
         .collect();
     // `ways.ferry`, tagged ways and path members, are the ferry ways: a node 2+ of them hold needs a highway or terminal.
@@ -716,7 +710,6 @@ pub fn routes(units: &[Unit]) -> Vec<Route> {
     out
 }
 
-/// Units per kind and drop reason, for the report.
 pub fn drops(units: &[Unit]) -> BTreeMap<(Kind, Option<Drop>), usize> {
     let mut out = BTreeMap::new();
     for u in units {
@@ -738,7 +731,6 @@ mod tests {
         }
     }
 
-    /// 0.0001° of latitude is 11.1 m.
     fn north(m: f64) -> LatLon {
         (54.0 + m / 111_195.0, 11.0)
     }
@@ -774,13 +766,14 @@ mod tests {
         let h = held(&ws, [10, 20, 30, 40, 11].into_iter());
         assert_eq!((h[&10], h[&20], h[&30], h[&40], h[&11]), (2, 1, 2, 1, 1));
         // Node 10 is an end by its highway, 30 by a terminal within 50 m; with neither, both are joins.
-        let at: HashMap<i64, LatLon> = [
+        let at: FxHashMap<i64, LatLon> = [
             (10, north(0.0)),
             (20, north(5000.0)),
             (30, north(9000.0)),
             (40, north(20000.0)),
         ]
-        .into();
+        .into_iter()
+        .collect();
         let rels = vec![Rel {
             id: 7,
             kind: RelKind::Ferry,
@@ -829,13 +822,14 @@ mod tests {
     #[test]
     fn stop_end_rule() {
         let m = |ty: char, id: i64, role: &str| Member::new(ty, id, role);
-        let at: HashMap<(char, i64), LatLon> = [
+        let at: FxHashMap<(char, i64), LatLon> = [
             (('n', 1), north(0.0)),
             (('w', 2), north(10.0)),
             (('n', 3), north(3000.0)),
             (('w', 4), north(6000.0)),
         ]
-        .into();
+        .into_iter()
+        .collect();
         let ends = |ms: &[Member]| stop_ends(ms, |m| at.get(&(m.ty, m.id)).copied());
         // First and last stop or platform member, a way by its first node; relations and route ways skipped.
         let ms = [

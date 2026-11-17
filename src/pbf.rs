@@ -1,7 +1,3 @@
-//! Passes over a PBF sorted by type then id (`Sort.Type_then_ID`, as the planet): a blob index from
-//! the headers alone, the node / way / relation boundaries by binary search, then one blob range per
-//! pass decoded in parallel, each worker with its own file handle (no mmap: RSS stays allocations).
-
 use std::fs::File;
 use std::io::BufReader;
 use std::ops::Range;

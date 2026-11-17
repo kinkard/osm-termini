@@ -1,10 +1,6 @@
-//! Ferry landings' helpers: `amenity=ferry_terminal` nodes, ways and relation rings; non-ferry highway nodes; a grid
-//! for "within m metres" candidates.
-
-use std::collections::HashMap;
-
 use plane_projection::PlaneProjection;
 use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 use crate::coords::Bits;
 use crate::pbf::Blobs;
@@ -12,7 +8,6 @@ use crate::pbf::Blobs;
 /// (lat, lon) in degrees.
 pub type LatLon = (f64, f64);
 
-/// What a way is to the ferry passes, from one scan of its tags.
 #[derive(Debug, Default, PartialEq)]
 pub struct Quick<'a> {
     pub route: &'a str,
@@ -99,14 +94,14 @@ pub fn terminal_m(t: &Terminal, at: LatLon) -> f64 {
 /// Grid buckets over degrees, for "within m metres" candidates.
 pub struct Grid {
     cell: f64,
-    map: HashMap<(i32, i32), Vec<usize>>,
+    map: FxHashMap<(i32, i32), Vec<usize>>,
 }
 
 impl Grid {
     pub fn new(cell: f64) -> Self {
         Grid {
             cell,
-            map: HashMap::new(),
+            map: FxHashMap::default(),
         }
     }
 
@@ -201,7 +196,7 @@ pub fn assemble(ways: &[&[i64]]) -> (Vec<Vec<i64>>, usize) {
             open.push(w);
         }
     }
-    let mut ends: HashMap<i64, Vec<usize>> = HashMap::new();
+    let mut ends: FxHashMap<i64, Vec<usize>> = FxHashMap::default();
     for (i, w) in open.iter().enumerate() {
         ends.entry(w[0]).or_default().push(i);
         ends.entry(*w.last().unwrap()).or_default().push(i);

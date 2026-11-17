@@ -1,6 +1,9 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use rustc_hash::FxHashMap;
+
 use crate::pbf::Blobs;
+use crate::routes::{Langs, read_langs};
 
 /// (lat, lon) in degrees.
 pub type LatLon = (f64, f64);
@@ -66,8 +69,8 @@ impl Coords {
         })
     }
 
-    /// Stores the node if wanted; `k` is a cursor into `ids`, walked forward while ids ascend.
-    pub fn put(&self, k: &mut Option<usize>, id: i64, lat: i32, lon: i32) {
+    /// Stores the node if wanted, and tells whether it was; `k` is a cursor into `ids`, walked forward while ids ascend.
+    pub fn put(&self, k: &mut Option<usize>, id: i64, lat: i32, lon: i32) -> bool {
         let mut i = match *k {
             Some(i) if i == 0 || self.ids[i - 1] < id => i,
             _ => self.ids.partition_point(|&x| x < id),
@@ -75,27 +78,40 @@ impl Coords {
         while i < self.ids.len() && self.ids[i] < id {
             i += 1;
         }
-        if self.ids.get(i) == Some(&id) {
+        *k = Some(i);
+        let wanted = self.ids.get(i) == Some(&id);
+        if wanted {
             self.packed[i].store(pack(lat, lon), Ordering::Relaxed);
         }
-        *k = Some(i);
+        wanted
     }
 }
 
-/// Node pass: fills `coords`.
-pub fn nodes(blobs: &Blobs, coords: &Coords) {
-    blobs.par_map(blobs.nodes(), |b| {
+/// Node pass: fills `coords`; the names of the `named` nodes, sorted ids among `coords`'.
+pub fn nodes(blobs: &Blobs, coords: &Coords, named: &[i64]) -> FxHashMap<i64, Langs> {
+    let per_block = blobs.par_map(blobs.nodes(), |b| {
+        let mut out = Vec::new();
         for g in b.groups() {
             let mut k = None;
             for n in g.dense_nodes() {
-                coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon());
+                if coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon())
+                    && named.binary_search(&n.id()).is_ok()
+                {
+                    out.push((n.id(), read_langs(n.tags())));
+                }
             }
             let mut k = None;
             for n in g.nodes() {
-                coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon());
+                if coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon())
+                    && named.binary_search(&n.id()).is_ok()
+                {
+                    out.push((n.id(), read_langs(n.tags())));
+                }
             }
         }
+        out
     });
+    per_block.into_iter().flatten().collect()
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 [package]
 name = "osm-termini"
-description = "Dataset for geocoding tests extracted from OSM ferry, rail and coach routes"
+description = "Geocoding test dataset from the ends of OSM ferry, train and coach routes"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.100"

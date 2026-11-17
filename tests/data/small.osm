@@ -21,11 +21,17 @@
   <node id="20" lat="54.5709000" lon="11.9300000"/>
   <node id="21" lat="8.6400000" lon="-83.1700000"/>
   <node id="22" lat="8.5300000" lon="-83.3000000"/>
+  <node id="23" lat="53.8701000" lon="10.6702000"/>
   <!-- relation 300: train stops; relation 301: coach stops -->
   <node id="10" lat="53.5500000" lon="10.0000000"/>
   <node id="11" lat="53.8700000" lon="10.6700000"/>
-  <node id="12" lat="52.5200000" lon="13.4000000"/>
-  <node id="13" lat="50.0800000" lon="14.4300000"/>
+  <node id="12" lat="51.0400000" lon="13.7300000">
+    <tag k="name" v="Dresden, Busbahnhof"/>
+    <tag k="name:cs" v="Drážďany"/>
+  </node>
+  <node id="13" lat="50.0800000" lon="14.4300000">
+    <tag k="name" v="Praha, ÚAN Florenc"/>
+  </node>
   <way id="100">
     <nd ref="1"/><nd ref="2"/><nd ref="3"/>
     <tag k="route" v="ferry"/>
@@ -70,9 +76,14 @@
     <tag k="name" v="Ruta Golfito - Puerto Jiménez (Península de Osa)"/>
     <tag k="name:es" v="Línea 1 (Golfito - Puerto Jiménez)"/>
   </way>
+  <way id="109">
+    <nd ref="11"/><nd ref="23"/>
+    <tag k="public_transport" v="platform"/>
+    <tag k="name" v="Lübeck Hauptbahnhof"/>
+  </way>
   <relation id="300">
     <member type="node" ref="10" role="stop"/>
-    <member type="node" ref="11" role="platform"/>
+    <member type="way" ref="109" role="platform"/>
     <tag k="type" v="route"/>
     <tag k="route" v="train"/>
     <tag k="public_transport:version" v="2"/>

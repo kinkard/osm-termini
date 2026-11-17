@@ -17,7 +17,7 @@ struct Config {
     /// OSM PBF sorted by type then id, as the planet is.
     #[arg(long)]
     pbf: PathBuf,
-    /// Output directory for the TSVs.
+    /// Output directory for termini.tsv.
     #[arg(long, default_value = "data")]
     out: PathBuf,
 }
@@ -62,7 +62,7 @@ fn main() {
         format!(
             "{} ferry and shuttle ways and member ways, {} stop ways",
             ways.path.len(),
-            ways.first.len(),
+            ways.stops.len(),
         ),
     );
 
@@ -71,7 +71,7 @@ fn main() {
         .flatten()
         .copied()
         .collect();
-    need.extend(ways.first.iter().map(|f| f.1));
+    need.extend(ways.stops.iter().map(|s| s.first));
     need.extend(
         (rels
             .iter()
@@ -80,27 +80,47 @@ fn main() {
     );
     need.sort_unstable();
     need.dedup();
+    let mut named: Vec<i64> = (rels.iter())
+        .flat_map(|r| {
+            [
+                routes::outer_stops(&r.members),
+                routes::end_stops(&r.members),
+            ]
+        })
+        .flatten()
+        .flatten()
+        .filter(|m| m.ty == 'n')
+        .map(|m| m.id)
+        .collect();
+    named.sort_unstable();
+    named.dedup();
     let coords = Coords::new(need);
-    coords::nodes(&blobs, &coords);
+    let node_names = coords::nodes(&blobs, &coords, &named);
     tm.lap(
         "nodes",
-        format!("{} needed, {} found", coords.len(), coords.found()),
+        format!(
+            "{} needed, {} found, {} end stop nodes named",
+            coords.len(),
+            coords.found(),
+            node_names.values().filter(|t| !t.is_empty()).count()
+        ),
     );
 
-    let x = routes::extract(&rels, &ways, |n| coords.get(n));
-    let (places, swapped) = routes::places(&x.units);
+    let x = routes::extract(&rels, &ways, |n| coords.get(n), &node_names);
+    let places = routes::places(&x.units, &x.generic);
     tm.lap(
         "units, places",
         format!(
-            "{} units, {} places, {} ferry name pairs swapped",
+            "{} units, {} places, {} name pairs swapped, {} train and coach names dropped",
             x.units.len(),
-            places.len(),
-            swapped.len()
+            places.rows.len(),
+            places.swapped.len(),
+            places.dropped.len()
         ),
     );
 
     let mut tsv = String::from("lat\tlon\tlang\tname\tids\n");
-    for p in &places {
+    for p in &places.rows {
         let _ = writeln!(
             tsv,
             "{:.7}\t{:.7}\t{}\t{}\t{}",
@@ -119,7 +139,7 @@ fn main() {
         println!("{l}");
     }
     println!("\ntotal {:.0} s\n", all.elapsed().as_secs_f64());
-    report(&x, &places, &swapped);
+    report(&x, &places);
     coach(&bus);
 }
 
@@ -141,7 +161,7 @@ impl Timer {
     }
 }
 
-fn report(x: &routes::Extract, places: &[routes::Place], swapped: &[(usize, &str)]) {
+fn report(x: &routes::Extract, places: &routes::Places) {
     let drops = routes::drops(&x.units);
     let mut head = String::from("| kind | OSM units |");
     for d in Drop::ALL {
@@ -161,20 +181,29 @@ fn report(x: &routes::Extract, places: &[routes::Place], swapped: &[(usize, &str
         let _ = write!(row, " {} |", n(None));
         println!("{row}");
     }
-    let langs: std::collections::BTreeSet<&str> = places.iter().map(|p| p.lang.as_str()).collect();
-    let plain = places.iter().filter(|p| p.lang.is_empty()).count();
-    println!(
-        "\n{} rows: {plain} plain names, {} in {} languages; {} ferry name pairs swapped, e.g. {}\n",
-        places.len(),
-        places.len() - plain,
-        langs.len() - langs.contains("") as usize,
-        swapped.len(),
-        (swapped.iter().take(10))
-            .map(|&(u, lang)| format!("{} {lang}", x.units[u].osm_id())
-                .trim_end()
-                .to_string())
+    let rows = &places.rows;
+    let langs: std::collections::BTreeSet<&str> = rows.iter().map(|p| p.lang.as_str()).collect();
+    let plain = rows.iter().filter(|p| p.lang.is_empty()).count();
+    let some = |v: &[(usize, &str)]| {
+        (v.iter().take(10))
+            .map(|&(u, lang)| {
+                format!("{} {lang}", x.units[u].osm_id())
+                    .trim_end()
+                    .to_string()
+            })
             .collect::<Vec<_>>()
             .join(", ")
+    };
+    println!(
+        "\n{} rows: {plain} plain names, {} in {} languages; {} name pairs swapped, e.g. {}; {} train and coach \
+         names dropped, e.g. {}\n",
+        rows.len(),
+        rows.len() - plain,
+        langs.len() - langs.contains("") as usize,
+        places.swapped.len(),
+        some(&places.swapped),
+        places.dropped.len(),
+        some(&places.dropped),
     );
 }
 

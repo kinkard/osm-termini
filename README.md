@@ -33,8 +33,9 @@ The 2026-11-09 planet gives 31,857 rows, 9,252 of them in 92 languages beyond th
 - Per language: `from` and `to`; else the first and last part of `name` split outside brackets at ` - `, ` – `, ` — `,
   ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `, else inside its trailing bracket ("JR Kyoto Line
   (Osaka - Kyoto)"); else a lone `from`, `to` or part ("Ferry to Crow Island").
-- Labels go: text before a colon ("Flixbus 718: Toulon"), a remark after it in a split name ("Gedser: 2h"), leading codes ("G5810", "IC-01 Eupen", "HSR 108 Zuoying"),
-  route words and their number ("Ruta Golfito", "Linie P1", "Fähre Kaub"). A label-only name goes.
+- Labels go: text before a colon ("Flixbus 718: Toulon"), a remark after it in a split name ("Gedser: 2h"), leading
+  codes ("G5810", "IC-01 Eupen", "HSR 108 Zuoying"), route words and their number ("Ruta Golfito", "Linie P1", "Fähre
+  Kaub"). A label-only name goes.
 - A name needs a letter and more than a generic word (ferry, landing, quay, pier, jetty, wharf, dock, port, harbour,
   harbor, terminal, station, stop, boat, line, route, gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger).
 - "A (B)", "A/B": two names when each part has more than 3 letters. A lowercase or letterless "(b)" goes ("Tampa

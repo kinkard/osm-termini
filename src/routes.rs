@@ -342,8 +342,13 @@ pub fn relations(blobs: &Blobs) -> (Vec<Rel>, Bus) {
 }
 
 /// `route=ferry` a ferry, `route=shuttle_train` a train; raw tags, as UTF-8 checks of every way's tags are costly.
-fn route_kind<S: AsRef<[u8]>>(mut tags: impl Iterator<Item = (S, S)>) -> Option<Kind> {
-    match tags.find(|(k, _)| k.as_ref() == b"route")?.1.as_ref() {
+fn route_kind<S: AsRef<[u8]>>(tags: impl IntoIterator<Item = (S, S)>) -> Option<Kind> {
+    match tags
+        .into_iter()
+        .find(|(k, _)| k.as_ref() == b"route")?
+        .1
+        .as_ref()
+    {
         b"ferry" => Some(Kind::Ferry),
         b"shuttle_train" => Some(Kind::Train),
         _ => None,
@@ -883,14 +888,13 @@ mod tests {
             ]
         );
 
-        let kind = |tags: &[(&str, &str)]| route_kind(tags.iter().copied());
         assert_eq!(
-            kind(&[("name", "X"), ("route", "ferry")]),
+            route_kind([("name", "X"), ("route", "ferry")]),
             Some(Kind::Ferry)
         );
-        assert_eq!(kind(&[("route", "shuttle_train")]), Some(Kind::Train));
-        assert_eq!(kind(&[("route", "train")]), None);
-        assert_eq!(kind(&[("railway", "rail")]), None);
+        assert_eq!(route_kind([("route", "shuttle_train")]), Some(Kind::Train));
+        assert_eq!(route_kind([("route", "train")]), None);
+        assert_eq!(route_kind([("railway", "rail")]), None);
     }
 
     #[test]

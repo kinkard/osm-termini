@@ -26,6 +26,7 @@ fn small_planet() {
         tsv.lines().collect::<Vec<_>>(),
         [
             "lat\tlon\tlang\tname\tids",
+            "41.9200000\t8.7400000\t\tAjaccio\tway/105",
             "52.5200000\t13.4000000\t\tBerlin\trelation/301",
             "50.9300000\t1.8100000\t\tCoquelles\tway/102",
             "51.0900000\t1.1400000\t\tFolkestone\tway/102",
@@ -34,7 +35,7 @@ fn small_planet() {
             "53.5500000\t10.0000000\t\tHamburg Hbf\trelation/300",
             "60.1445126\t21.3141333\t\tKorpo\tway/106",
             "53.8700000\t10.6700000\t\tLübeck Hbf\trelation/300",
-            "43.3000000\t5.3600000\t\tMarseille\trelation/302",
+            "43.3000000\t5.3600000\t\tMarseille\trelation/302,way/105",
             "8.5300000\t-83.3000000\t\tPenínsula de Osa\tway/108",
             "50.0800000\t14.4300000\t\tPraha\trelation/301",
             "42.6700000\t8.9000000\t\tPropriano\trelation/302",

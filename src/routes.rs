@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use osmpbf::RelMemberType;
 use plane_projection::PlaneProjection;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::coords::{Bits, LatLon};
 use crate::pbf::Blobs;
@@ -611,7 +611,7 @@ impl Unit {
     }
 }
 
-/// Every OSM unit: ferry and shuttle relations, then ferry and shuttle ways no such relation holds, then train
+/// Every OSM unit: ferry and shuttle relations, then ferry and shuttle ways, then train
 /// relations, then coach relations; each in id order.
 pub struct Extract {
     pub units: Vec<Unit>,
@@ -633,12 +633,10 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
         }
     };
     let mut units = Vec::new();
-    let mut members = FxHashSet::default();
     for r in rels
         .iter()
         .filter(|r| matches!(r.kind, RelKind::Ferry | RelKind::Shuttle))
     {
-        members.extend(r.members.iter().map(|m| m.id));
         let path: Vec<&Way> = (r.members.iter())
             .filter_map(|m| way_of.get(&m.id).copied())
             .collect();
@@ -653,7 +651,8 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
             ends: path_ends(&path),
         });
     }
-    for w in ways.path.iter().filter(|w| !members.contains(&w.id)) {
+    // Relations' ferry and shuttle ways too: a leg names its own two piers.
+    for w in ways.path.iter() {
         let Some(kind) = w.kind else {
             continue;
         };
@@ -849,6 +848,10 @@ mod tests {
             tags: Langs::default(),
             refs: refs.to_vec(),
         };
+        let named = |mut w: Way, name: &str| {
+            w.tags = read_langs([("name", name)].into_iter());
+            w
+        };
         let ways = Ways {
             path: vec![
                 way(1, Some(Kind::Ferry), &[10, 11, 12]),
@@ -856,19 +859,20 @@ mod tests {
                 way(3, Some(Kind::Train), &[12, 13]),
                 way(4, Some(Kind::Ferry), &[12, 99]),
                 way(5, None, &[14, 15]),
-                way(6, Some(Kind::Ferry), &[15, 16]),
+                named(way(6, Some(Kind::Ferry), &[15, 16]), "A - C"),
+                named(way(20, Some(Kind::Ferry), &[16, 17]), "B - C"),
             ],
             ..Ways::default()
         };
         let at = |n: i64| (n < 99).then(|| north((n - 10) as f64 * 1000.0));
-        // Relation 7 runs over ways 5 and 6, an untagged and a ferry way; relation 8 has none of its ways.
+        // Relation 7 runs over an untagged way and two ferry ways, units too; relation 8 has none of its ways.
         let rel = |id: i64, ways: &[i64]| Rel {
             id,
             kind: RelKind::Ferry,
-            tags: Langs::default(),
+            tags: read_langs([("name", "A - C")].into_iter()),
             members: ways.iter().map(|&w| Member::new('w', w, "")).collect(),
         };
-        let rels = [rel(7, &[5, 6]), rel(8, &[9])];
+        let rels = [rel(7, &[5, 6, 20]), rel(8, &[9])];
         let got: Vec<(Kind, String, Result<[LatLon; 2], Drop>)> = (extract(&rels, &ways, at).units)
             .into_iter()
             .map(|u| (u.kind, u.osm_id(), u.ends))
@@ -879,7 +883,7 @@ mod tests {
                 (
                     Kind::Ferry,
                     "relation/7".into(),
-                    Ok([north(4000.0), north(6000.0)])
+                    Ok([north(4000.0), north(7000.0)])
                 ),
                 (Kind::Ferry, "relation/8".into(), Err(Drop::Ends)),
                 (Kind::Ferry, "way/1".into(), Ok([north(0.0), north(2000.0)])),
@@ -890,6 +894,16 @@ mod tests {
                     Ok([north(2000.0), north(3000.0)])
                 ),
                 (Kind::Ferry, "way/4".into(), Err(Drop::Missing)),
+                (
+                    Kind::Ferry,
+                    "way/6".into(),
+                    Ok([north(5000.0), north(6000.0)])
+                ),
+                (
+                    Kind::Ferry,
+                    "way/20".into(),
+                    Ok([north(6000.0), north(7000.0)])
+                ),
             ]
         );
 

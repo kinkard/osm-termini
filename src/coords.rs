@@ -1,10 +1,7 @@
-//! Id sets for the way pass and node coordinates for the node pass.
-
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::pbf::Blobs;
 
-/// A bit per id, for membership tests in the way pass.
 pub struct Bits(Vec<u64>);
 
 impl Bits {

@@ -1,57 +1,31 @@
-//! OSM route termini from a sorted planet PBF: one TSV per kind (ferry, train, coach), a row per route with two ends
-//! and two names; the funnel and the coach operator list as Markdown on stdout.
+use std::fmt::Write as _;
+use std::path::PathBuf;
+use std::time::Instant;
+
+use clap::Parser;
+use coords::{Bits, Coords};
+use pbf::Blobs;
+use routes::{Drop, Kind, LONG, Named, RelKind};
+use terminals::{Terminal, Terminals};
 
 mod coords;
 mod pbf;
 mod routes;
 mod terminals;
 
-use std::fmt::Write as _;
-use std::path::PathBuf;
-use std::time::Instant;
-
-use coords::{Bits, Coords};
-use pbf::Blobs;
-use routes::{Drop, Kind, LONG, Named, RelKind};
-use terminals::{Terminal, Terminals};
-
-const USAGE: &str = "\
-usage: osm-termini --pbf PLANET.osm.pbf [--out DIR]
-
-Writes DIR/ferry.tsv, DIR/train.tsv, DIR/coach.tsv (DIR defaults to data): id, name_a, lat_a, lon_a, name_b,
-lat_b, lon_b. The rules are in README.md. OSM data is ODbL 1.0, © OpenStreetMap contributors.";
-
-fn arg(args: &[String], key: &str) -> Option<String> {
-    let i = args.iter().position(|a| a == key)?;
-    args.get(i + 1).cloned()
-}
-
-/// Tabs and line breaks to spaces: a TSV field.
-fn field(s: &str) -> String {
-    s.replace(['\t', '\n', '\r'], " ")
-}
-
-struct Timer(Instant, Vec<String>);
-
-impl Timer {
-    fn lap(&mut self, what: &str, detail: String) {
-        let row = format!(
-            "| {what} | {:.1} | {detail} |",
-            self.0.elapsed().as_secs_f64()
-        );
-        eprintln!("{row}");
-        self.1.push(row);
-        self.0 = Instant::now();
-    }
+/// Writes ferry.tsv, train.tsv and coach.tsv to the output directory: id, name_a, lat_a, lon_a, name_b, lat_b, lon_b.
+#[derive(Parser)]
+struct Config {
+    /// OSM PBF sorted by type then id, as the planet is.
+    #[arg(long)]
+    pbf: PathBuf,
+    /// Output directory for the TSVs.
+    #[arg(long, default_value = "data")]
+    out: PathBuf,
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let Some(pbf) = arg(&args, "--pbf").map(PathBuf::from) else {
-        eprintln!("{USAGE}");
-        std::process::exit(2);
-    };
-    let out = PathBuf::from(arg(&args, "--out").unwrap_or_else(|| "data".into()));
+    let Config { pbf, out } = Config::parse();
     std::fs::create_dir_all(&out).expect("create the output directory");
     let all = Instant::now();
     let mut tm = Timer(Instant::now(), Vec::new());
@@ -207,6 +181,24 @@ fn main() {
     coach(&bus);
 }
 
+fn field(s: &str) -> String {
+    s.replace(['\t', '\n', '\r'], " ")
+}
+
+struct Timer(Instant, Vec<String>);
+
+impl Timer {
+    fn lap(&mut self, what: &str, detail: String) {
+        let row = format!(
+            "| {what} | {:.1} | {detail} |",
+            self.0.elapsed().as_secs_f64()
+        );
+        eprintln!("{row}");
+        self.1.push(row);
+        self.0 = Instant::now();
+    }
+}
+
 fn report(x: &routes::Extract, rs: &[routes::Route]) {
     let drops = routes::drops(&x.units);
     let mut head = String::from("| kind | OSM units |");
@@ -246,12 +238,7 @@ fn report(x: &routes::Extract, rs: &[routes::Route]) {
         );
         println!("{row}");
     }
-    println!(
-        "\nloop: one landing, or the first and last stop within 50 m; ends: a ferry with other than two landings, or \
-         fewer than two stop / platform members; missing: the first or last stop without coordinates; not PTv2: no \
-         public_transport:version=2; merged: joined an earlier route of the kind; no names: no unit with from and \
-         to, nor a name that splits; same names: written, name_a equal to name_b.\n"
-    );
+    println!();
 }
 
 fn coach(bus: &routes::Bus) {

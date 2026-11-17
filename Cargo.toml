@@ -3,15 +3,16 @@ name = "osm-termini"
 description = "Dataset for geocoding tests extracted from OSM ferry, rail and coach routes"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.100"
 license = "MIT OR Apache-2.0"
-publish = false
-
-[dependencies]
-osmpbf = "0.3.8"
-plane-projection = "0.3"
-rayon = "1.12"
 
 [profile.release]
 strip = true
 lto = "thin"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+osmpbf = "0.3"
+plane-projection = "0.3"
+rayon = "1"
+rustc-hash = "2"

@@ -18,44 +18,35 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 33,849 rows, 12,327 of them in 151 languages beyond the plain tags.
+The 2026-11-09 planet gives 28,353 rows, 8,177 of them in 88 languages beyond the plain tags.
 
 ## Routes and ends
 
-Ferry and shuttle train routes are `type=route` relations with `route=ferry` or `route=shuttle_train`, and ways with
-those tags that are not members of such a relation; their ends are the first way's first node and the last way's last
-node. Trains are PTv2 `route=train` relations, coaches PTv2 `route=bus` relations with "flix" in `operator` or
-`network`; their ends are the first and last `stop` member, or the first and last stop or platform member when there are
-fewer than two stops, as routes may list their platforms after all their stops.
+- Ferries, shuttle trains: `type=route` relations with `route=ferry` or `route=shuttle_train`, and such ways outside
+  them. Ends: the first way's first node, the last way's last node.
+- Trains: PTv2 `route=train` relations. Coaches: PTv2 `route=bus` relations with "flix" in `operator` or `network`.
+  Ends: the first and last `stop` member, else stop or platform member; platforms may follow all the stops.
 
 ## Names
 
-In each language, a route's two ends are named by `from` and `to`; else by the first and last part of a `name` that
-splits outside brackets at a spaced separator: ` - `, ` – `, ` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `,
-` ⇄ `, ` to `, or else inside its trailing bracket: "JR Kyoto Line (Osaka - Kyoto)"; else a lone `from`, `to` or part
-names its end: "Ferry to Crow Island".
-
-A name loses its route label: the text before a colon ("Flixbus 718: Toulon"), leading route and train codes ("G5810",
-"IC-01 Eupen", "HSR 108 Zuoying") and route words with their number ("Ruta Golfito", "Linie P1", "Balsa Bertioga",
-"Fähre Kaub"); a name that is only a label is dropped. A name must contain a letter and be more than a generic word
-(ferry, landing, quay, pier, jetty, wharf, dock, port, harbour, harbor, terminal, station, stop, boat, line, route,
-gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger): not "7:00" or "Ferry".
-
-"A (B)" and "A/B" are two names, "A" and "B", when each part has more than 3 letters; a lowercase or letterless "(b)" is
-dropped ("Tampa (seasonal)" is "Tampa", "Zachodni (11)" is "Zachodni") and so is a generic "A" ("Wharf (Bhaucha
-Dhakka)"); else the name stays as tagged: "Alderney (GBG)", "Frankfurt (Main) Hbf".
-
-A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often
-within 5 km of the other end; names in another language also count the route's plain names, and follow them on a tie.
-
-A train's or coach's end stop adds its own names, in every language; an unnamed stop takes its platform's within 1 km. A
-trailing platform number goes: "Museum, Platform 2" is "Museum", "peron 1a" nothing. The route's names swap ends when
-they agree with the stops' crosswise, and stand at an end only if its stop's name says nothing (only generic words:
-those of stop names in 10 or more 0.1° cells, as "station", "peron"), agrees with them, or other routes name them within
-5 km: a route with missing stops starts somewhere else. Names agree when they share a word, words compared by their
-first 5 letters, a shorter one by prefix: "Göteborgs central" and "Göteborg C", "長津田駅" and "長津田".
-
-The same name in the same language within 1 km is one row.
+- Per language: `from` and `to`; else the first and last part of `name` split outside brackets at ` - `, ` – `, ` — `,
+  ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `, else inside its trailing bracket ("JR Kyoto Line
+  (Osaka - Kyoto)"); else a lone `from`, `to` or part ("Ferry to Crow Island").
+- Labels go: text before a colon ("Flixbus 718: Toulon"), leading codes ("G5810", "IC-01 Eupen", "HSR 108 Zuoying"),
+  route words and their number ("Ruta Golfito", "Linie P1", "Fähre Kaub"). A label-only name goes.
+- A name needs a letter and more than a generic word (ferry, landing, quay, pier, jetty, wharf, dock, port, harbour,
+  harbor, terminal, station, stop, boat, line, route, gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger).
+- "A (B)", "A/B": two names when each part has more than 3 letters. A lowercase or letterless "(b)" goes ("Tampa
+  (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as tagged: "Alderney (GBG)".
+- Ferries: names swap ends when other routes name them more often within 5 km of the other end. Other languages also
+  count the plain names, and follow them on a tie.
+- Trains, coaches: end stop names only check the route's names and are not written.
+  - Names swap ends when they match the stops crosswise.
+  - An end's name goes when its stop's name disagrees and no other route names it within 5 km: missing stops.
+  - Stop names of generic words ("station", "peron": words in 10 or more 0.1° cells) and platform numbers say nothing.
+  - An unnamed stop takes its platform's name within 1 km.
+  - Names match on a word, by its first 5 letters or a prefix: "Göteborgs central", "Göteborg C"; "長津田駅", "長津田".
+- One row per name and language within 1 km.
 
 ## Run
 

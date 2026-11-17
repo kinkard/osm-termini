@@ -862,24 +862,10 @@ pub struct Places<'a> {
 
 /// A row per language, name and place (`SAME_M`). A ferry's names swap ends by majority of other units' names within
 /// `VOTE_M`; other languages also count the unit's plain names and follow them on a tie. A train's or coach's end stop
-/// adds its names, and its route's names for that end stand only if the stop's name is no evidence (no word but generic
-/// ones), agrees, or other units name them within `VOTE_M`: routes with missing stops start elsewhere.
+/// names only check its names: they swap when they agree with the stops crosswise, and stand at an end only if its
+/// stop's name is no evidence (no word but generic ones), agrees, or other units name them within `VOTE_M`.
 pub fn places<'a>(units: &'a [Unit], generic: &FxHashSet<String>) -> Places<'a> {
     let evidence = |s: &str| words(s).any(|w| !generic.contains(&w));
-    let mut stop_names: Vec<(usize, &str, &str, LatLon)> = Vec::new();
-    for (u, unit) in units.iter().enumerate() {
-        let Ok(ends) = unit.ends else {
-            continue;
-        };
-        for (tags, at) in unit.stops.iter().zip(ends) {
-            for (lang, t) in tags {
-                let s = stop_name(unlabel(&t.name), generic);
-                if place(s) && evidence(s) {
-                    stop_names.push((u, lang, s, at));
-                }
-            }
-        }
-    }
     let mut named: Vec<Named> = Vec::new();
     for (u, unit) in units.iter().enumerate() {
         let Ok(ends) = unit.ends else {
@@ -899,9 +885,6 @@ pub fn places<'a>(units: &'a [Unit], generic: &FxHashSet<String>) -> Places<'a> 
                 seen.entry(s).or_default().push((u, at));
             }
         }
-    }
-    for &(u, _, s, at) in &stop_names {
-        seen.entry(s).or_default().push((u, at));
     }
     // Units other than `u` naming `s` within `VOTE_M` of `at`, in any language.
     let votes = |u: usize, s: Option<&str>, at: LatLon| {
@@ -937,11 +920,6 @@ pub fn places<'a>(units: &'a [Unit], generic: &FxHashSet<String>) -> Places<'a> 
     };
     let (mut swapped, mut dropped) = (Vec::new(), Vec::new());
     let mut mentions: BTreeMap<(&str, &str), Vec<(LatLon, usize)>> = BTreeMap::new();
-    for &(u, lang, s, at) in &stop_names {
-        for s in parts(s) {
-            mentions.entry((lang, s)).or_default().push((at, u));
-        }
-    }
     // The current unit's plain names; `named` has them first.
     let mut plain: Option<Plain> = None;
     for &(u, lang, mut n, [a, b]) in &named {
@@ -1497,8 +1475,8 @@ mod tests {
                 [p(50.0), p(0.0)],
                 &[("from", "A"), ("to", "B")],
             ),
-            // A coach with missing stops starts at "Gamma", not "Alpha": the stop's names, in every language, replace
-            // the route's; "B" stands by other units.
+            // A coach with missing stops starts at "Gamma", not "Alpha": its names for that end go, in every language;
+            // "B" stands by other units.
             stops(
                 unit(
                     Kind::Coach,
@@ -1566,20 +1544,13 @@ mod tests {
                     p(50.0),
                     ids("relation/1,relation/2,relation/3,relation/6")
                 ),
-                ("", "B Hbf", p(50.0), ids("relation/6")),
                 ("", "C", p(100.0), ids("relation/4")),
                 ("", "D", p(120.0), ids("relation/4")),
                 ("", "E", p(400.0), ids("relation/7")),
-                ("", "Gamma", p(300.0), ids("relation/6")),
-                ("", "Gee", p(500.0), ids("relation/7")),
                 ("", "H", p(600.0), ids("relation/8")),
                 ("", "Pe", p(800.0), ids("relation/9")),
-                ("", "Pe Hbf", p(800.0), ids("relation/9")),
                 ("", "Qu", p(700.0), ids("relation/9")),
-                ("", "Qu Hbf", p(700.0), ids("relation/9")),
-                ("", "Zed", p(50.3), ids("relation/8")),
                 ("de", "Be", p(50.0), ids("relation/6")),
-                ("de", "Gamma-Stadt", p(300.0), ids("relation/6")),
                 ("es", "A", p(0.2), ids("relation/3")),
                 ("es", "Be", p(49.5), ids("relation/3")),
             ]

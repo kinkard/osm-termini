@@ -342,8 +342,8 @@ pub fn relations(blobs: &Blobs) -> (Vec<Rel>, Bus) {
 }
 
 /// `route=ferry` a ferry, `route=shuttle_train` a train; raw tags, as UTF-8 checks of every way's tags are costly.
-fn route_kind<'a>(mut tags: impl Iterator<Item = (&'a [u8], &'a [u8])>) -> Option<Kind> {
-    match tags.find(|(k, _)| *k == b"route")?.1 {
+fn route_kind<S: AsRef<[u8]>>(mut tags: impl Iterator<Item = (S, S)>) -> Option<Kind> {
+    match tags.find(|(k, _)| k.as_ref() == b"route")?.1.as_ref() {
         b"ferry" => Some(Kind::Ferry),
         b"shuttle_train" => Some(Kind::Train),
         _ => None,
@@ -374,9 +374,8 @@ pub fn ways(blobs: &Blobs, path: &Bits, stops: &Bits) -> Ways {
             for w in g.ways() {
                 let id = w.id();
                 let st = w.raw_stringtable();
-                let kind = route_kind(
-                    (w.raw_tags()).map(|(k, v)| (&st[k as usize][..], &st[v as usize][..])),
-                );
+                let kind =
+                    route_kind((w.raw_tags()).map(|(k, v)| (&st[k as usize], &st[v as usize])));
                 if kind.is_some() || path.has(id) {
                     out.path.push(Way {
                         id,
@@ -884,9 +883,7 @@ mod tests {
             ]
         );
 
-        let kind = |tags: &[(&str, &str)]| {
-            route_kind(tags.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())))
-        };
+        let kind = |tags: &[(&str, &str)]| route_kind(tags.iter().copied());
         assert_eq!(
             kind(&[("name", "X"), ("route", "ferry")]),
             Some(Kind::Ferry)

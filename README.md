@@ -40,8 +40,8 @@ A name loses its route label: the text before a colon ("Flixbus 718: Toulon"), l
 quay, pier, jetty, wharf, dock, port, harbour, harbor, terminal, station, stop, boat, line, route, gare, bahnhof,
 hauptbahnhof, busbahnhof, hafen, fähre, anleger): not "7:00" or "Ferry".
 
-"A (B)" and "A/B" are two names, "A" and "B", when each part has more than 3 letters; a lowercase "(b)" is dropped
-("Tampa (seasonal)" is "Tampa") and so is a generic "A" ("Wharf (Bhaucha Dhakka)"); else the name stays as tagged:
+"A (B)" and "A/B" are two names, "A" and "B", when each part has more than 3 letters; a lowercase or letterless "(b)" is
+dropped ("Tampa (seasonal)" is "Tampa", "Zachodni (11)" is "Zachodni") and so is a generic "A" ("Wharf (Bhaucha Dhakka)"); else the name stays as tagged:
 "Alderney (GBG)", "Frankfurt (Main) Hbf".
 
 A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often

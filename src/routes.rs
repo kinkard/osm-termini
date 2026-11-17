@@ -547,15 +547,15 @@ fn place(s: &str) -> bool {
 }
 
 /// The names a tagged name holds: "A (B)" and "A/B" are "A" and "B" when each part is a `place` of more than 3 letters;
-/// a lowercase "(b)" and a generic "A" are no names: "Tampa (seasonal)", "Wharf (Bhaucha Dhakka)"; else the name as
-/// tagged: "Alderney (GBG)", "Batayporã/MS".
+/// a lowercase or letterless "(b)" and a generic "A" are no names: "Tampa (seasonal)", "Zachodni (11)", "Wharf (Bhaucha
+/// Dhakka)"; else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
 pub fn parts(name: &str) -> Vec<&str> {
     let ok = |s: &str| place(s) && s.chars().filter(|c| c.is_alphabetic()).count() > 3;
     if let Some((outer, inner)) = trailing(name) {
         let lower = inner.starts_with(char::is_lowercase);
         match (ok(outer), ok(inner) && !lower) {
             (true, true) => return [parts(outer), parts(inner)].concat(),
-            (true, false) if lower => return parts(outer),
+            (true, false) if lower || !place(inner) => return parts(outer),
             (false, true) if !place(outer) => return parts(inner),
             _ => {}
         }
@@ -1089,6 +1089,11 @@ mod tests {
             ["Landungsbrücken", "Brücke 3/4"]
         );
         assert_eq!(parts("Bondorf (bei Herrenberg)"), ["Bondorf"]);
+        assert_eq!(
+            parts("Dworzec Autobusowy Zachodni (11)"),
+            ["Dworzec Autobusowy Zachodni"]
+        );
+        assert_eq!(parts("Novalja (Pag)"), ["Novalja (Pag)"], "a short name");
         assert_eq!(parts("St Martin's (low tide)"), ["St Martin's"]);
         assert_eq!(parts("Wharf (Bhaucha Dhakka)"), ["Bhaucha Dhakka"]);
         assert_eq!(parts("(on request)"), ["(on request)"]);

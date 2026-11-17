@@ -553,6 +553,13 @@ pub fn extract(rels: &[Rel], ways: &Ways, at: impl Fn(i64) -> Option<LatLon>) ->
             return Err(Drop::Ends);
         };
         match (at(a), at(b)) {
+            // A round trip's far end: its node farthest from the start.
+            (Some(pa), Some(_)) if a == b => {
+                let proj = PlaneProjection::new(pa.0);
+                let far = (ws.iter().flat_map(|w| &w.refs).filter_map(|&n| at(n)))
+                    .max_by(|p, q| proj.distance(pa, *p).total_cmp(&proj.distance(pa, *q)));
+                Ok([pa, far.unwrap_or(pa)])
+            }
             (Some(a), Some(b)) => Ok([a, b]),
             _ => Err(Drop::Missing),
         }
@@ -663,7 +670,11 @@ pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
             continue;
         };
         for (lang, t) in &unit.tags {
-            let n = end_names(t);
+            let mut n = end_names(t);
+            // A name at both ends is one place, the first end: "Thun - Thun" round trips.
+            if n[0] == n[1] {
+                n[1] = None;
+            }
             if n.iter().any(Option::is_some) {
                 named.push((u, lang, n, ends));
             }
@@ -806,8 +817,8 @@ mod tests {
             ..Ways::default()
         };
         let at = |n: i64| (n < 99).then(|| north((n - 10) as f64 * 1000.0));
-        // Relation 7 runs over an untagged way and two ferry ways, units too; relation 8 has none of its ways; relations
-        // 21 and 24 have a first and a last way drawn against the route.
+        // Way 2 is a round trip, its far end node 11. Relation 7 runs over an untagged way and two ferry ways, units too;
+        // relation 8 has none of its ways; relations 21 and 24 have a first and a last way drawn against the route.
         let rel = |id: i64, ways: &[i64]| Rel {
             id,
             kind: RelKind::Ferry,
@@ -844,7 +855,7 @@ mod tests {
                     Ok([north(30000.0), north(32000.0)])
                 ),
                 (Kind::Ferry, "way/1".into(), Ok([north(0.0), north(2000.0)])),
-                (Kind::Ferry, "way/2".into(), Ok([north(0.0), north(0.0)]),),
+                (Kind::Ferry, "way/2".into(), Ok([north(0.0), north(1000.0)])),
                 (
                     Kind::Train,
                     "way/3".into(),
@@ -1229,6 +1240,13 @@ mod tests {
                 [p(3000.0), p(3100.0)],
                 &[("name", "X - Y")],
             ),
+            // A round trip names "K" once, at its start.
+            unit(
+                Kind::Ferry,
+                40,
+                [p(4000.0), p(4010.0)],
+                &[("name", "K - K")],
+            ),
         ];
         let (places, swapped) = places(&units);
         assert_eq!(swapped, [(2, ""), (2, "es"), (9, ""), (10, "")]);
@@ -1245,6 +1263,7 @@ mod tests {
                 ("", "B", p(50.0), ids("relation/1,relation/2,relation/3")),
                 ("", "C", p(100.0), ids("relation/4")),
                 ("", "D", p(120.0), ids("relation/4")),
+                ("", "K", p(4000.0), ids("relation/40")),
                 ("", "M", p(2000.0), ids("relation/10,relation/13")),
                 ("", "M", p(2100.0), ids("relation/11,relation/12")),
                 ("", "N", p(2000.0), ids("relation/11,relation/12")),

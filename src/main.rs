@@ -66,10 +66,11 @@ fn main() {
         ),
     );
 
-    let mut need: Vec<i64> = (ways.path.iter())
-        .flat_map(|w| [w.refs.first(), w.refs.last()])
-        .flatten()
-        .copied()
+    // Every node of the ferry and shuttle ways, for a round trip's far end.
+    let mut need: Vec<i64> = ways
+        .path
+        .iter()
+        .flat_map(|w| w.refs.iter().copied())
         .collect();
     need.extend(ways.first.iter().map(|f| f.1));
     need.extend(

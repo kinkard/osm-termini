@@ -18,12 +18,13 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 31,920 rows, 9,277 of them in 92 languages beyond the plain tags.
+The 2026-11-09 planet gives 31,857 rows, 9,252 of them in 92 languages beyond the plain tags.
 
 ## Routes and ends
 
 - Ferries, shuttle trains: `type=route` relations with `route=ferry` or `route=shuttle_train`, and such ways, relation
-  members too. Ends: the tips of the first and last way away from the rest of the path.
+  members too. Ends: the tips of the first and last way away from the rest of the path; a round trip's far end is its
+  node farthest from the start.
 - Trains: PTv2 `route=train` relations. Coaches: PTv2 `route=bus` relations with "flix" in `operator` or `network`.
   Ends: the first and last `stop` member, else stop or platform member; platforms may follow all the stops.
 
@@ -32,7 +33,7 @@ The 2026-11-09 planet gives 31,920 rows, 9,277 of them in 92 languages beyond th
 - Per language: `from` and `to`; else the first and last part of `name` split outside brackets at ` - `, ` – `, ` — `,
   ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `, else inside its trailing bracket ("JR Kyoto Line
   (Osaka - Kyoto)"); else a lone `from`, `to` or part ("Ferry to Crow Island").
-- Labels go: text before a colon ("Flixbus 718: Toulon"), leading codes ("G5810", "IC-01 Eupen", "HSR 108 Zuoying"),
+- Labels go: text before a colon ("Flixbus 718: Toulon"), a remark after it in a split name ("Gedser: 2h"), leading codes ("G5810", "IC-01 Eupen", "HSR 108 Zuoying"),
   route words and their number ("Ruta Golfito", "Linie P1", "Fähre Kaub"). A label-only name goes.
 - A name needs a letter and more than a generic word (ferry, landing, quay, pier, jetty, wharf, dock, port, harbour,
   harbor, terminal, station, stop, boat, line, route, gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger).
@@ -41,6 +42,7 @@ The 2026-11-09 planet gives 31,920 rows, 9,277 of them in 92 languages beyond th
 - Ferries: names swap ends when other routes name them more often within 5 km of the other end; `from` and `to` count
   double, a relation and its ways do not vote for each other. Other languages also count the plain names, and follow
   them on a tie.
+- A name at both ends is written once, at the first: "Thun - Thun".
 - One row per name and language within 1 km.
 
 ## Run

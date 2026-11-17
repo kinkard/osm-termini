@@ -8,32 +8,36 @@ N.B.: The PBF must be sorted by type then id, as the planet is. `osm-termini` re
 
 ## Output
 
-One TSV per kind in the output directory (`data/` by default): `ferry.tsv`, `train.tsv`, `coach.tsv`.
+`termini.tsv` in the output directory (`data/` by default): a row per name at a place, from ferry, car shuttle train,
+train and coach routes.
 
 | column | value |
 |---|---|
-| `id` | OSM type and id of the route's first unit: `relation/123`, `way/456` |
-| `name_a` | name of end a |
-| `lat_a`, `lon_a` | end a, degrees, 7 decimals |
-| `name_b` | name of end b |
-| `lat_b`, `lon_b` | end b |
+| `lat`, `lon` | the place, degrees, 7 decimals |
+| `lang` | empty for `name`, `from`, `to`; `es` for `name:es`, `from:es`, `to:es`; `zh-Hant`, ... |
+| `name` | as tagged |
+| `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-Rows from the 2026-11-09 planet: 5,740 ferry, 7,803 train, 746 coach.
+Rows from the 2026-11-09 planet: 34,160, of them 13,787 in 88 languages other than the plain tags.
+
+## Routes and ends
+
+Ferry and shuttle train routes are `type=route` relations with `route=ferry` or `route=shuttle_train`, and ways with
+those tags that no such relation holds; their ends are the first way's first node and the last way's last node. Trains
+are PTv2 `route=train` relations, coaches PTv2 `route=bus` relations with "flix" in `operator` or `network`; their ends
+are the first and last stop or platform member.
 
 ## Names
 
-From the route's units in order: `from` and `to` of the first unit with both set; else the first unit whose `name`
-splits at a spaced separator, first and last part. Separators, the first of this list the name holds: ` - `, ` – `,
-` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `.
+In each language, a route's two ends are named by `from` and `to`; else by the first and last part of a `name` that
+splits at a spaced separator: ` - `, ` – `, ` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `; else
+a lone `from` or `to` names its end. A name needs a letter and more than a generic word (ferry, landing, quay, pier,
+jetty, wharf, dock, port, harbour, harbor, terminal): not "7:00" or "Ferry". Names are kept as tagged, parentheses
+included: "Frankfurt (Main)", "Ιθάκη (Φρίκες)".
 
-Then trailing parenthesised tags are removed from each name, every one and nested ones included:
-"Gedser (S)" → "Gedser", "Trelleborg (SE)" → "Trelleborg"; a name that would become empty is kept as is. Values are
-trimmed and tabs or line breaks become spaces; nothing else is cleaned. A route without names is dropped.
-
-**Names to ends.** The names follow the unit they came from: `from` or the first part at that unit's first end, swapped
-when the unit joined the route reversed. For train and coach the first end is the first stop, so `name_a` belongs to
-end a. A ferry's first end is its first way's first node, which `from` need not match: for ferries the pairing is not
-guaranteed.
+A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often
+within 5 km of the other end; names in another language also count the route's plain names, and follow them on a tie.
+The same name in the same language within 1 km is one row.
 
 ## Run
 

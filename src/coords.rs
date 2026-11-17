@@ -2,6 +2,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::pbf::Blobs;
 
+/// (lat, lon) in degrees.
+pub type LatLon = (f64, f64);
+
 pub struct Bits(Vec<u64>);
 
 impl Bits {
@@ -79,35 +82,20 @@ impl Coords {
     }
 }
 
-/// Node pass: `coords` filled; `f` called on every node with tags (id, lat, lon, tags), its results in blob order.
-pub fn nodes<T, F>(blobs: &Blobs, coords: &Coords, f: F) -> Vec<T>
-where
-    T: Send,
-    F: Fn(i64, (f64, f64), &mut dyn Iterator<Item = (&str, &str)>) -> Option<T> + Sync + Send,
-{
-    let per_block = blobs.par_map(blobs.nodes(), |b| {
-        let mut out = Vec::new();
-        let at = |lat: i32, lon: i32| (lat as f64 / 1e7, lon as f64 / 1e7);
+/// Node pass: fills `coords`.
+pub fn nodes(blobs: &Blobs, coords: &Coords) {
+    blobs.par_map(blobs.nodes(), |b| {
         for g in b.groups() {
             let mut k = None;
             for n in g.dense_nodes() {
-                let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
-                coords.put(&mut k, n.id(), lat, lon);
-                let mut tags = n.tags().peekable();
-                if tags.peek().is_some() {
-                    out.extend(f(n.id(), at(lat, lon), &mut tags));
-                }
+                coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon());
             }
             let mut k = None;
             for n in g.nodes() {
-                let (lat, lon) = (n.decimicro_lat(), n.decimicro_lon());
-                coords.put(&mut k, n.id(), lat, lon);
-                out.extend(f(n.id(), at(lat, lon), &mut n.tags()));
+                coords.put(&mut k, n.id(), n.decimicro_lat(), n.decimicro_lon());
             }
         }
-        out
     });
-    per_block.into_iter().flatten().collect()
 }
 
 #[cfg(test)]

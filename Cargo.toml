@@ -1,6 +1,6 @@
 [package]
 name = "osm-termini"
-description = "OSM ferry, train and coach route termini from a planet PBF: two ends and two place names per route"
+description = "Dataset for geocoding tests extracted from OSM ferry, rail and coach routes"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"

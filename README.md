@@ -1,9 +1,10 @@
 # osm-termini
 
-Two ends and two place names per OpenStreetMap ferry, train and coach route, as a test set for geocoders: search a
-name and expect a result near an end, or reverse-geocode an end and expect a name.
+It's hard to measure geocoding quality without a proper dataset of names and coordinates. `osm-termini` was born from an idea that it's possible to use terminal points of OSM ferry, train and coach routes for that.
 
-Built from the OSM planet `planet-261109.osm.pbf` (2026-11-09).
+Check https://wiki.openstreetmap.org/wiki/Planet.osm and https://download.geofabrik.de for various options where to get OSM PBF.
+
+N.B.: The PBF must be sorted by type then id, as the planet is. `osm-termini` relies on that fact as it uses binary search over blobs for faster scans.
 
 ## Output
 
@@ -18,35 +19,6 @@ One TSV per kind in the output directory (`data/` by default): `ferry.tsv`, `tra
 | `lat_b`, `lon_b` | end b |
 
 Rows from the 2026-11-09 planet: 5,740 ferry, 7,803 train, 746 coach.
-
-## Units
-
-A unit is one OSM relation or way. Each kind has its own units and end rule.
-
-| kind | units | ends |
-|---|---|---|
-| ferry | relations `type=route` + `route=ferry`; ways `route=ferry` that no such relation holds | end nodes of the unit's ways (relation member ways whose role does not start with `stop` or `platform`) |
-| train | relations `type=route` + `route=train` + `public_transport:version=2` | the first and last member with role `stop`, `stop_entry_only`, `stop_exit_only`, `platform`, `platform_entry_only` or `platform_exit_only`; a node as is, a way by its first node, a relation member skipped |
-| coach | relations `type=route` + `route=bus` + `public_transport:version=2` whose `operator` or `network` contains "flix", any case | as train |
-
-**Ferry ends.** A node held by two or more ferry ways is not an end unless a non-ferry `highway=*` way holds it or an
-`amenity=ferry_terminal` (node, way, or relation ring) lies within 50 m. Ends within 50 m of each other (single
-linkage) are one landing. A unit needs exactly two landings.
-
-**Dropped units:**
-
-| reason | rule |
-|---|---|
-| loop | one landing; a train or coach whose first and last stop lie within 50 m |
-| ends | a ferry with other than two landings; a train or coach with fewer than two stop or platform members |
-| missing | a train's or coach's first or last stop without coordinates |
-| not PTv2 | a `type=route` + `route=train` relation, or a flix `type=route` + `route=bus` relation, without `public_transport:version=2` |
-
-## Routes
-
-Units are taken relations first, then ways, each in id order. A unit joins the first earlier route of its kind whose
-two ends each lie within 500 m of a different end of its own, in either order; else it starts a route. This merges the
-two directions of a line and duplicates. A route keeps its first unit's ends.
 
 ## Names
 
@@ -69,16 +41,9 @@ guaranteed.
 cargo run --release -- --pbf planet.osm.pbf --out data
 ```
 
-The PBF must be sorted by type then id, as the planet is. A blob index, then four passes: relations, ways, highway
-ways, nodes; on the 2026-11-09 planet about 135 s and 3.7 GB maximum resident memory on an 18-core Apple machine.
-
-Markdown on stdout: the counts per kind and reason, and the 20 most frequent `operator` values of `type=route` +
-`route=bus` relations with `bus=coach`, `coach=yes`, `bus=long_distance`, `bus=long-distance` or
-`service=long_distance` (candidates for more coach operators; not in `coach.tsv`).
-
 ## Licence
+
+Code: MIT OR Apache-2.0, at your option ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)).
 
 Data: the TSVs are derived from OpenStreetMap and are licensed under the
 [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/), © OpenStreetMap contributors.
-
-Code: MIT OR Apache-2.0, at your option ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)).

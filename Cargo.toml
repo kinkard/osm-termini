@@ -1,0 +1,17 @@
+[package]
+name = "osm-termini"
+description = "OSM ferry, train and coach route termini from a planet PBF: two ends and two place names per route"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+osmpbf = "0.3.8"
+plane-projection = "0.3"
+rayon = "1.12"
+
+[profile.release]
+strip = true
+lto = "thin"

@@ -18,7 +18,7 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-The 2026-11-09 planet gives 31,857 rows, 9,252 of them in 92 languages beyond the plain tags.
+The 2026-11-09 planet gives 31,651 rows, 9,210 of them in 92 languages beyond the plain tags.
 
 ## Routes and ends
 
@@ -38,8 +38,9 @@ The 2026-11-09 planet gives 31,857 rows, 9,252 of them in 92 languages beyond th
   Kaub"). A label-only name goes.
 - A name needs a letter and more than a generic word (ferry, landing, quay, pier, jetty, wharf, dock, port, harbour,
   harbor, terminal, station, stop, boat, line, route, gare, bahnhof, hauptbahnhof, busbahnhof, hafen, fähre, anleger).
-- "A (B)", "A/B": two names when each part has more than 3 letters. A lowercase or letterless "(b)" goes ("Tampa
-  (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as tagged: "Alderney (GBG)".
+- "A (B)", "A/B": two names when each part has more than 3 letters. A short, lowercase or letterless "(b)" goes
+  ("Alderney (GBG)", "Tampa (seasonal)", "Zachodni (11)"), so does a generic "A" ("Wharf (Bhaucha Dhakka)"). Else as
+  tagged: "Batayporã/MS".
 - Ferries: names swap ends when other routes name them more often within 5 km of the other end; `from` and `to` count
   double, a relation and its ways do not vote for each other. Other languages also count the plain names, and follow
   them on a tie.

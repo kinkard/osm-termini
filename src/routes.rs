@@ -465,17 +465,19 @@ fn place(s: &str) -> bool {
 }
 
 /// The names a tagged name holds: "A (B)" and "A/B" are "A" and "B" when each part is a `place` of more than 3 letters;
-/// a lowercase or letterless "(b)" and a generic "A" are no names: "Tampa (seasonal)", "Zachodni (11)", "Wharf (Bhaucha
-/// Dhakka)", "(on request)"; else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
+/// a short, lowercase or letterless "(b)" and a generic "A" are no names: "Alderney (GBG)", "Tampa (seasonal)", "Zachodni
+/// (11)", "Wharf (Bhaucha Dhakka)", "(on request)"; else the name as tagged: "Batayporã/MS".
 pub fn parts(name: &str) -> Vec<&str> {
     let ok = |s: &str| place(s) && s.chars().filter(|c| c.is_alphabetic()).count() > 3;
     if let Some((outer, inner)) = trailing(name) {
-        let lower = inner.starts_with(char::is_lowercase);
-        match (ok(outer), ok(inner) && !lower) {
+        match (
+            ok(outer),
+            ok(inner) && !inner.starts_with(char::is_lowercase),
+        ) {
             (true, true) => return [parts(outer), parts(inner)].concat(),
-            (true, false) if lower || !place(inner) => return parts(outer),
+            (_, false) if place(outer) => return parts(outer),
+            (_, false) => return Vec::new(),
             (false, true) if !place(outer) => return parts(inner),
-            (false, false) if !place(outer) => return Vec::new(),
             _ => {}
         }
     }
@@ -680,26 +682,29 @@ pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
             }
         }
     }
-    // Names, their ends and weights: `from` and `to` 2, a split `name` 1.
+    // Name `parts`, their ends and weights: `from` and `to` 2, a split `name` 1.
     let mut seen: FxHashMap<&str, Vec<(usize, LatLon, usize)>> = FxHashMap::default();
     for &(u, lang, n, ends) in &named {
         let t = &units[u].tags[lang];
         for (s, at) in n.iter().zip(ends) {
             if let Some(s) = s {
                 let w = 1 + (unlabel(&t.from) == *s || unlabel(&t.to) == *s) as usize;
-                seen.entry(s).or_default().push((u, at, w));
+                for p in parts(s) {
+                    seen.entry(p).or_default().push((u, at, w));
+                }
             }
         }
     }
     let apart =
         |u: usize, v: usize| v != u && !units[u].rels.iter().any(|r| units[v].rels.contains(r));
-    // The weight of units apart from `u` naming `s` within `VOTE_M` of `at`, in any language; a unit's highest.
+    // The weight of units apart from `u` naming a part of `s` within `VOTE_M` of `at`, in any language; a unit's highest.
     let votes = |u: usize, s: Option<&str>, at: LatLon| {
         let Some(s) = s else {
             return 0;
         };
         let proj = PlaneProjection::new(at.0);
-        let mut us: Vec<(usize, usize)> = (seen[s].iter())
+        let mut us: Vec<(usize, usize)> = (parts(s).into_iter())
+            .flat_map(|p| &seen[p])
             .filter(|&&(v, p, _)| apart(u, v) && proj.distance(at, p) <= VOTE_M)
             .map(|&(v, _, w)| (v, w))
             .collect();
@@ -1063,7 +1068,10 @@ mod tests {
             ["Addax", "Sandfill", "Maroko", "Victoria Island"]
         );
         assert_eq!(parts("Fribourg / Freiburg"), ["Fribourg", "Freiburg"]);
-        assert_eq!(parts("Alderney (GBG)"), ["Alderney (GBG)"], "too short");
+        assert_eq!(parts("Alderney (GBG)"), ["Alderney"]);
+        assert_eq!(parts("Geltendorf (S/R)"), ["Geltendorf"]);
+        assert_eq!(parts("Hel (PL)"), ["Hel"]);
+        assert_eq!(parts("Ystad (S)"), ["Ystad"]);
         assert_eq!(parts("Batayporã/MS"), ["Batayporã/MS"]);
         assert_eq!(parts("Hermannswerder/Fähre"), ["Hermannswerder"]);
         assert_eq!(parts("Brücke 3/4"), ["Brücke 3/4"]);
@@ -1077,7 +1085,7 @@ mod tests {
             parts("Dworzec Autobusowy Zachodni (11)"),
             ["Dworzec Autobusowy Zachodni"]
         );
-        assert_eq!(parts("Novalja (Pag)"), ["Novalja (Pag)"], "a short name");
+        assert_eq!(parts("Novalja (Pag)"), ["Novalja"]);
         assert_eq!(parts("St Martin's (low tide)"), ["St Martin's"]);
         assert_eq!(parts("Wharf (Bhaucha Dhakka)"), ["Bhaucha Dhakka"]);
         assert!(parts("(on request)").is_empty());
@@ -1247,9 +1255,28 @@ mod tests {
                 [p(4000.0), p(4010.0)],
                 &[("name", "K - K")],
             ),
+            unit(
+                Kind::Ferry,
+                50,
+                [p(5000.0), p(5100.0)],
+                &[("name", "Saint Malo (F) - St. Peter Port (GBG)")],
+            ),
+            // The train's names out-vote the ferry's through their brackets.
+            unit(
+                Kind::Ferry,
+                60,
+                [p(6000.0), p(6100.0)],
+                &[("name", "Rhea (F) - Saba (GBG)")],
+            ),
+            unit(
+                Kind::Train,
+                61,
+                [p(6000.0), p(6100.0)],
+                &[("name", "Saba - Rhea")],
+            ),
         ];
         let (places, swapped) = places(&units);
-        assert_eq!(swapped, [(2, ""), (2, "es"), (9, ""), (10, "")]);
+        assert_eq!(swapped, [(2, ""), (2, "es"), (9, ""), (10, ""), (14, "")]);
         let got: Vec<(&str, &str, LatLon, String)> = (places.iter())
             .map(|q| (q.lang.as_str(), q.name.as_str(), q.at, q.ids.join(",")))
             .collect();
@@ -1268,6 +1295,10 @@ mod tests {
                 ("", "M", p(2100.0), ids("relation/11,relation/12")),
                 ("", "N", p(2000.0), ids("relation/11,relation/12")),
                 ("", "N", p(2100.0), ids("relation/10,relation/13")),
+                ("", "Rhea", p(6100.0), ids("relation/60,relation/61")),
+                ("", "Saba", p(6000.0), ids("relation/60,relation/61")),
+                ("", "Saint Malo", p(5000.0), ids("relation/50")),
+                ("", "St. Peter Port", p(5100.0), ids("relation/50")),
                 ("", "X", p(3000.0), ids("relation/30,relation/32,way/31")),
                 ("", "Y", p(3100.0), ids("relation/30,relation/32,way/31")),
                 ("es", "A", p(0.2), ids("relation/3")),

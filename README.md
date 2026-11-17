@@ -41,8 +41,8 @@ quay, pier, jetty, wharf, dock, port, harbour, harbor, terminal, station, stop, 
 hauptbahnhof, busbahnhof, hafen, fähre, anleger): not "7:00" or "Ferry".
 
 "A (B)" and "A/B" are two names, "A" and "B", when each part has more than 3 letters; a lowercase or letterless "(b)" is
-dropped ("Tampa (seasonal)" is "Tampa", "Zachodni (11)" is "Zachodni") and so is a generic "A" ("Wharf (Bhaucha Dhakka)"); else the name stays as tagged:
-"Alderney (GBG)", "Frankfurt (Main) Hbf".
+dropped ("Tampa (seasonal)" is "Tampa", "Zachodni (11)" is "Zachodni") and so is a generic "A" ("Wharf (Bhaucha
+Dhakka)"); else the name stays as tagged: "Alderney (GBG)", "Frankfurt (Main) Hbf".
 
 A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often
 within 5 km of the other end; names in another language also count the route's plain names, and follow them on a tie.

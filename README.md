@@ -18,7 +18,7 @@ train and coach routes.
 | `name` | as tagged |
 | `ids` | the OSM routes naming it there, comma separated: `relation/123,way/456` |
 
-Rows from the 2026-11-09 planet: 34,160, of them 13,787 in 88 languages other than the plain tags.
+Rows from the 2026-11-09 planet: 29,384, of them 8,521 in 88 languages other than the plain tags.
 
 ## Routes and ends
 
@@ -30,11 +30,19 @@ are the first and last stop or platform member.
 ## Names
 
 In each language, a route's two ends are named by `from` and `to`; else by the first and last part of a `name` that
-splits at a spaced separator: ` - `, ` – `, ` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `; else
-a lone `from` or `to` names its end. A name needs a letter and more than a generic word (ferry, landing, quay, pier,
-jetty, wharf, dock, port, harbour, harbor, terminal): not "7:00" or "Ferry". A route label before a colon in a split
-`name` goes: "Flixbus 718: Toulon" is "Toulon". "A (B)" and "A/B" are two names, "A" and "B", when each part has more than
-3 letters; else the name stays as tagged: "Alderney (GBG)", "Frankfurt (Main) Hbf".
+splits outside brackets at a spaced separator: ` - `, ` – `, ` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `,
+` to `, or else inside its trailing bracket: "JR Kyoto Line (Osaka - Kyoto)"; else a lone `from`, `to` or part names its
+end: "Ferry to Crow Island".
+
+A name loses its route label: the text before a colon ("Flixbus 718: Toulon"), leading route and train codes ("G5810",
+"IC-01 Eupen", "HSR 108 Zuoying") and route words with their number ("Ruta Golfito", "Linie P1", "Balsa Bertioga",
+"Fähre Kaub"); a name that is only a label goes. A name needs a letter and more than a generic word (ferry, landing,
+quay, pier, jetty, wharf, dock, port, harbour, harbor, terminal, station, stop, boat, line, route, gare, bahnhof,
+hauptbahnhof, busbahnhof, hafen, fähre, anleger): not "7:00" or "Ferry".
+
+"A (B)" and "A/B" are two names, "A" and "B", when each part has more than 3 letters; a lowercase "(b)" is dropped
+("Tampa (seasonal)" is "Tampa") and so is a generic "A" ("Wharf (Bhaucha Dhakka)"); else the name stays as tagged:
+"Alderney (GBG)", "Frankfurt (Main) Hbf".
 
 A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often
 within 5 km of the other end; names in another language also count the route's plain names, and follow them on a tie.

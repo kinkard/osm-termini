@@ -30,9 +30,56 @@ pub const SEPS: [&str; 11] = [
 ];
 
 /// Words that are not a place name on their own, any case.
-pub const GENERIC: [&str; 11] = [
-    "ferry", "landing", "quay", "pier", "jetty", "wharf", "dock", "port", "harbour", "harbor",
+pub const GENERIC: [&str; 23] = [
+    "ferry",
+    "landing",
+    "quay",
+    "pier",
+    "jetty",
+    "wharf",
+    "dock",
+    "port",
+    "harbour",
+    "harbor",
     "terminal",
+    "station",
+    "stop",
+    "boat",
+    "line",
+    "route",
+    "gare",
+    "bahnhof",
+    "hauptbahnhof",
+    "busbahnhof",
+    "hafen",
+    "fähre",
+    "anleger",
+];
+
+/// Words of a route label before the place, any case: "Ruta Golfito", "Balsa Bertioga", "Tuyến phà Chì".
+pub const ROUTE_WORDS: [&str; 22] = [
+    "ruta",
+    "rute",
+    "rota",
+    "línea",
+    "linea",
+    "linie",
+    "ligne",
+    "linija",
+    "route",
+    "travessia",
+    "balsa",
+    "barca",
+    "lancha",
+    "ferry",
+    "boat",
+    "speedboat",
+    "fähre",
+    "autofähre",
+    "tuyến",
+    "phà",
+    "đò",
+    "tàu",
 ];
 
 /// Tags that mark a `route=bus` relation as a coach or long-distance route, for the operator list.
@@ -404,16 +451,81 @@ pub fn stop_ends(
     }
 }
 
-/// The first and last part of a name split at the first of `SEPS` it holds, trimmed and without a route label before a
-/// colon: "Flixbus 718: Toulon => Nice"; `None` when one is empty.
+/// A name ending in a bracket: the text before it and inside it, trimmed; "A (B (C))" is "A" and "B (C)".
+fn trailing(name: &str) -> Option<(&str, &str)> {
+    let body = name.strip_suffix(')')?;
+    let mut depth = 0;
+    for (i, c) in body.char_indices().rev() {
+        match c {
+            ')' => depth += 1,
+            '(' if depth == 0 => return Some((body[..i].trim(), body[i + 1..].trim())),
+            '(' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The first and last part of a name at `sep` outside brackets.
+fn split_outside<'a>(name: &'a str, sep: &str) -> Option<[&'a str; 2]> {
+    let outside = |i: usize| name[..i].matches('(').count() == name[..i].matches(')').count();
+    let mut at = name
+        .match_indices(sep)
+        .map(|(i, _)| i)
+        .filter(|&i| outside(i));
+    let first = at.next()?;
+    let last = at.last().unwrap_or(first);
+    Some([&name[..first], &name[last + sep.len()..]])
+}
+
+/// The first and last part of a name split outside brackets at the first of `SEPS` it holds there, else of its trailing
+/// bracket: "JR Kyoto Line (Osaka - Kyoto)"; trimmed, `None` when one is empty.
 pub fn split_name(name: &str) -> Option<[&str; 2]> {
-    let sep = SEPS.iter().find(|s| name.contains(*s))?;
-    let parts: Vec<&str> = name.split(sep).map(str::trim).collect();
-    let a = parts[0]
-        .rsplit_once([':', '：'])
-        .map_or(parts[0], |(_, a)| a.trim());
-    let b = parts[parts.len() - 1];
+    let Some([a, b]) = SEPS.iter().find_map(|sep| split_outside(name, sep)) else {
+        return split_name(trailing(name)?.1);
+    };
+    let (a, b) = (a.trim(), b.trim());
     (!a.is_empty() && !b.is_empty()).then_some([a, b])
+}
+
+/// A route or train code: uppercase letters, digits and dashes with a digit and a letter, "G5810", "IC-01"; not "Bender-3".
+fn code(s: &str) -> bool {
+    s.chars()
+        .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-')
+        && s.chars().any(|c| c.is_ascii_digit())
+        && s.chars().any(|c| c.is_ascii_uppercase())
+}
+
+/// A name without its route label: the text before a colon, leading codes, `ROUTE_WORDS` and their number, a train
+/// type and its number. "Flixbus 718: Toulon", "Rute Speedboat Tarakan", "HSR 108 Zuoying" are the last word; "G5810"
+/// and "Linie P1" are empty.
+pub fn unlabel(name: &str) -> &str {
+    let mut s = name
+        .rsplit_once([':', '：'])
+        .map_or(name, |(_, s)| s)
+        .trim();
+    loop {
+        let (head, rest) = s.split_once(' ').unwrap_or((s, ""));
+        let rest = rest.trim_start();
+        let (next, after) = rest.split_once(' ').unwrap_or((rest, ""));
+        let numbered = next.starts_with(|c: char| c.is_ascii_digit());
+        s = if code(head) {
+            rest
+        } else if !rest.is_empty() && ROUTE_WORDS.iter().any(|w| head.eq_ignore_ascii_case(w)) {
+            if code(next) || numbered {
+                after.trim_start()
+            } else {
+                rest
+            }
+        } else if (2..=4).contains(&head.len())
+            && head.chars().all(|c| c.is_ascii_uppercase())
+            && numbered
+        {
+            after.trim_start()
+        } else {
+            return s;
+        };
+    }
 }
 
 /// A place name: a letter in it and more than a `GENERIC` word; not "7:00" or "Ferry".
@@ -422,21 +534,24 @@ fn place(s: &str) -> bool {
 }
 
 /// The names a tagged name holds: "A (B)" and "A/B" are "A" and "B" when each part is a `place` of more than 3 letters;
-/// else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
+/// a lowercase "(b)" and a generic "A" are no names: "Tampa (seasonal)", "Wharf (Bhaucha Dhakka)"; else the name as
+/// tagged: "Alderney (GBG)", "Batayporã/MS".
 pub fn parts(name: &str) -> Vec<&str> {
     let ok = |s: &str| place(s) && s.chars().filter(|c| c.is_alphabetic()).count() > 3;
-    if let Some(open) = name.rfind('(')
-        && let Some(inner) = name[open + 1..].strip_suffix(')')
-        && !inner.contains('(')
-    {
-        let (outer, inner) = (name[..open].trim(), inner.trim());
-        if ok(outer) && ok(inner) {
-            return [parts(outer), parts(inner)].concat();
+    if let Some((outer, inner)) = trailing(name) {
+        let lower = inner.starts_with(char::is_lowercase);
+        match (ok(outer), ok(inner) && !lower) {
+            (true, true) => return [parts(outer), parts(inner)].concat(),
+            (true, false) if lower => return parts(outer),
+            (false, true) if !place(outer) => return parts(inner),
+            _ => {}
         }
     }
     if !name.contains('(') && name.contains('/') {
-        let ps: Vec<&str> = name.split('/').map(str::trim).collect();
-        if ps.iter().all(|p| ok(p)) {
+        let ps: Vec<&str> = (name.split('/').map(str::trim))
+            .filter(|p| !GENERIC.iter().any(|g| p.eq_ignore_ascii_case(g)))
+            .collect();
+        if !ps.is_empty() && ps.iter().all(|p| ok(p)) {
             return ps;
         }
     }
@@ -444,19 +559,17 @@ pub fn parts(name: &str) -> Vec<&str> {
 }
 
 /// The names of a unit's two ends in one language: `from` and `to`, else the parts of a `name` that splits, else a lone
-/// `from` or `to`; `place` names only.
+/// `from` or `to` or part: "Ferry to Crow Island"; `unlabel`ed `place` names only.
 pub fn end_names<'a>(t: &'a Tags) -> [Option<&'a str>; 2] {
-    let p = |s: &'a str| place(s).then_some(s);
+    let p = |s: &'a str| Some(unlabel(s)).filter(|s| place(s));
     if let (Some(a), Some(b)) = (p(&t.from), p(&t.to)) {
         return [Some(a), Some(b)];
     }
-    if let Some([a, b]) = split_name(&t.name)
-        && place(a)
-        && place(b)
-    {
-        return [Some(a), Some(b)];
+    let [a, b] = split_name(&t.name).map_or([None, None], |[a, b]| [p(a), p(b)]);
+    if a.is_some() && b.is_some() {
+        return [a, b];
     }
-    [p(&t.from), p(&t.to)]
+    [p(&t.from).or(a), p(&t.to).or(b)]
 }
 
 /// One OSM unit: a ferry or shuttle relation or way, a train or coach relation, and its fate.
@@ -866,13 +979,22 @@ mod tests {
         );
         assert_eq!(
             split_name("RE 1: Hamburg => Lübeck"),
-            Some(["Hamburg", "Lübeck"])
+            Some(["RE 1: Hamburg", "Lübeck"])
         );
-        assert_eq!(split_name("V3040：漠河 - 哈尔滨"), Some(["漠河", "哈尔滨"]));
+        // Not inside brackets; the trailing bracket's parts when nothing splits outside.
         assert_eq!(
-            split_name("TER C25 : Strasbourg - Bâle"),
-            Some(["Strasbourg", "Bâle"])
+            split_name("Frankfurt (Main - Süd) - Berlin"),
+            Some(["Frankfurt (Main - Süd)", "Berlin"])
         );
+        assert_eq!(
+            split_name("Línea JR Takarazuka (Osaka - Sasayamaguchi)"),
+            Some(["Osaka", "Sasayamaguchi"])
+        );
+        assert_eq!(
+            split_name("京成電鉄 金町線 (京成高砂 → 京成金町)"),
+            Some(["京成高砂", "京成金町"])
+        );
+        assert_eq!(split_name("Wanaka Water Taxi (Mou Waho)"), None);
         assert_eq!(split_name("Calais --> Dover"), Some(["Calais", "Dover"]));
         assert_eq!(
             split_name("Ferry to Isle of Wight"),
@@ -887,6 +1009,48 @@ mod tests {
     }
 
     #[test]
+    fn unlabel_rule() {
+        let cases = [
+            (
+                "Flixbus 718: Toulon, Gare routière",
+                "Toulon, Gare routière",
+            ),
+            ("Flixbus N831: Amsterdam Sloterdijk", "Amsterdam Sloterdijk"),
+            ("G5624：香港西九龍", "香港西九龍"),
+            ("TER C25 : Strasbourg", "Strasbourg"),
+            ("Ruta Barra del Colorado Norte", "Barra del Colorado Norte"),
+            ("Rute Speedboat Tarakan", "Tarakan"),
+            ("Ligne Pointe-à-Pitre", "Pointe-à-Pitre"),
+            ("Balsa Bertioga", "Bertioga"),
+            ("Tuyến phà Chì", "Chì"),
+            ("Ferry 612 Komiža (Vis)", "Komiža (Vis)"),
+            ("F14 Autofähre Kleinzschachwitz", "Kleinzschachwitz"),
+            ("F10 Fähre Heidenau", "Heidenau"),
+            ("KA15 Tanjung Malim", "Tanjung Malim"),
+            ("IC-01 Eupen", "Eupen"),
+            ("HSR 108 Zuoying", "Zuoying"),
+            ("KBS 975 Ulm", "Ulm"),
+            ("G5810", ""),
+            ("Ruta T-848", ""),
+            ("Linie P1", ""),
+            ("Route 3", ""),
+            // Not labels: a route word alone, numbers that are part of a place, lowercase ordinals.
+            ("Rota", "Rota"),
+            ("Ferryland", "Ferryland"),
+            ("1st Street", "1st Street"),
+            ("'t Schouw", "'t Schouw"),
+            ("25 de Mayo", "25 de Mayo"),
+            ("Pier 11", "Pier 11"),
+            ("Frankfurt (Main) Hbf", "Frankfurt (Main) Hbf"),
+            ("Bender-3", "Bender-3"),
+            ("Marconistraat/M4H", "Marconistraat/M4H"),
+        ];
+        for (name, want) in cases {
+            assert_eq!(unlabel(name), want, "{name}");
+        }
+    }
+
+    #[test]
     fn parts_rule() {
         assert_eq!(parts("Achele (Murnau)"), ["Achele", "Murnau"]);
         assert_eq!(
@@ -896,12 +1060,18 @@ mod tests {
         assert_eq!(parts("Fribourg / Freiburg"), ["Fribourg", "Freiburg"]);
         assert_eq!(parts("Alderney (GBG)"), ["Alderney (GBG)"], "too short");
         assert_eq!(parts("Batayporã/MS"), ["Batayporã/MS"]);
+        assert_eq!(parts("Hermannswerder/Fähre"), ["Hermannswerder"]);
         assert_eq!(parts("Brücke 3/4"), ["Brücke 3/4"]);
         assert_eq!(parts("Frankfurt (Main) Hbf"), ["Frankfurt (Main) Hbf"]);
         assert_eq!(
             parts("Landungsbrücken (Brücke 3/4)"),
             ["Landungsbrücken", "Brücke 3/4"]
         );
+        assert_eq!(parts("Bondorf (bei Herrenberg)"), ["Bondorf"]);
+        assert_eq!(parts("St Martin's (low tide)"), ["St Martin's"]);
+        assert_eq!(parts("Wharf (Bhaucha Dhakka)"), ["Bhaucha Dhakka"]);
+        assert_eq!(parts("(on request)"), ["(on request)"]);
+        assert_eq!(parts("Komiža (Vis (Otok))"), ["Komiža", "Vis (Otok)"]);
     }
 
     #[test]
@@ -923,8 +1093,22 @@ mod tests {
             [some("Thalwil"), some("Thalwil")]
         );
         assert_eq!(names("7:00 - 19:00", "", ""), [None, None]);
-        assert_eq!(names("Ferry to Crow Island", "", ""), [None, None]);
+        assert_eq!(
+            names("Ferry to Crow Island", "", ""),
+            [None, some("Crow Island")]
+        );
+        assert_eq!(names("Boat to X", "Y", ""), [some("Y"), some("X")]);
         assert_eq!(names("Fähre", "", ""), [None, None]);
+        assert_eq!(names("Bahnhof - Hafen", "", ""), [None, None]);
+        assert_eq!(
+            names("Flixbus 728: Genova => Milano", "", ""),
+            [some("Genova"), some("Milano")]
+        );
+        assert_eq!(names("", "Linie P1", "Hamburg"), [None, some("Hamburg")]);
+        assert_eq!(
+            names("Dublin Bay Ferry (Dún Laoghaire - Howth)", "", ""),
+            [some("Dún Laoghaire"), some("Howth")]
+        );
 
         let langs = read_langs(
             [

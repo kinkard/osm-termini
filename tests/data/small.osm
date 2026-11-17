@@ -19,6 +19,8 @@
   <node id="18" lat="60.1746294" lon="21.5567533"/>
   <node id="19" lat="54.1809000" lon="12.0900000"/>
   <node id="20" lat="54.5709000" lon="11.9300000"/>
+  <node id="21" lat="8.6400000" lon="-83.1700000"/>
+  <node id="22" lat="8.5300000" lon="-83.3000000"/>
   <!-- relation 300: train stops; relation 301: coach stops -->
   <node id="10" lat="53.5500000" lon="10.0000000"/>
   <node id="11" lat="53.8700000" lon="10.6700000"/>
@@ -62,6 +64,12 @@
     <tag k="name" v="Rostock - Gedser"/>
     <tag k="name:de" v="Rostock - Gedser"/>
   </way>
+  <way id="108">
+    <nd ref="21"/><nd ref="22"/>
+    <tag k="route" v="ferry"/>
+    <tag k="name" v="Ruta Golfito - Puerto Jiménez (Península de Osa)"/>
+    <tag k="name:es" v="Línea 1 (Golfito - Puerto Jiménez)"/>
+  </way>
   <relation id="300">
     <member type="node" ref="10" role="stop"/>
     <member type="node" ref="11" role="platform"/>
@@ -78,7 +86,8 @@
     <tag k="route" v="bus"/>
     <tag k="public_transport:version" v="2"/>
     <tag k="operator" v="FlixBus"/>
-    <tag k="name" v="Berlin -> Praha"/>
+    <tag k="name" v="Flixbus 728: Berlin -> Praha"/>
+    <tag k="name:de" v="Flixbus 728: Berlin => Prag"/>
   </relation>
   <relation id="302">
     <member type="way" ref="104" role=""/>

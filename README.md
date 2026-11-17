@@ -32,8 +32,9 @@ are the first and last stop or platform member.
 In each language, a route's two ends are named by `from` and `to`; else by the first and last part of a `name` that
 splits at a spaced separator: ` - `, ` – `, ` — `, ` -> `, ` --> `, ` → `, ` => `, ` ↔ `, ` <-> `, ` ⇄ `, ` to `; else
 a lone `from` or `to` names its end. A name needs a letter and more than a generic word (ferry, landing, quay, pier,
-jetty, wharf, dock, port, harbour, harbor, terminal): not "7:00" or "Ferry". Names are kept as tagged, parentheses
-included: "Frankfurt (Main)", "Ιθάκη (Φρίκες)".
+jetty, wharf, dock, port, harbour, harbor, terminal): not "7:00" or "Ferry". A route label before a colon in a split
+`name` goes: "Flixbus 718: Toulon" is "Toulon". "A (B)" and "A/B" are two names, "A" and "B", when each part has more than
+3 letters; else the name stays as tagged: "Alderney (GBG)", "Frankfurt (Main) Hbf".
 
 A ferry's first node need not be its `from` end, so a ferry's names swap ends when other routes name them more often
 within 5 km of the other end; names in another language also count the route's plain names, and follow them on a tie.

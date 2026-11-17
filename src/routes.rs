@@ -404,17 +404,43 @@ pub fn stop_ends(
     }
 }
 
-/// The first and last part of a name split at the first of `SEPS` it holds, trimmed; `None` when one is empty.
+/// The first and last part of a name split at the first of `SEPS` it holds, trimmed and without a route label before a
+/// colon: "Flixbus 718: Toulon => Nice"; `None` when one is empty.
 pub fn split_name(name: &str) -> Option<[&str; 2]> {
     let sep = SEPS.iter().find(|s| name.contains(*s))?;
     let parts: Vec<&str> = name.split(sep).map(str::trim).collect();
-    let (a, b) = (parts[0], parts[parts.len() - 1]);
+    let a = parts[0]
+        .rsplit_once([':', '：'])
+        .map_or(parts[0], |(_, a)| a.trim());
+    let b = parts[parts.len() - 1];
     (!a.is_empty() && !b.is_empty()).then_some([a, b])
 }
 
 /// A place name: a letter in it and more than a `GENERIC` word; not "7:00" or "Ferry".
 fn place(s: &str) -> bool {
     s.chars().any(char::is_alphabetic) && !GENERIC.iter().any(|g| s.eq_ignore_ascii_case(g))
+}
+
+/// The names a tagged name holds: "A (B)" and "A/B" are "A" and "B" when each part is a `place` of more than 3 letters;
+/// else the name as tagged: "Alderney (GBG)", "Batayporã/MS".
+pub fn parts(name: &str) -> Vec<&str> {
+    let ok = |s: &str| place(s) && s.chars().filter(|c| c.is_alphabetic()).count() > 3;
+    if let Some(open) = name.rfind('(')
+        && let Some(inner) = name[open + 1..].strip_suffix(')')
+        && !inner.contains('(')
+    {
+        let (outer, inner) = (name[..open].trim(), inner.trim());
+        if ok(outer) && ok(inner) {
+            return [parts(outer), parts(inner)].concat();
+        }
+    }
+    if !name.contains('(') && name.contains('/') {
+        let ps: Vec<&str> = name.split('/').map(str::trim).collect();
+        if ps.iter().all(|p| ok(p)) {
+            return ps;
+        }
+    }
+    vec![name]
 }
 
 /// The names of a unit's two ends in one language: `from` and `to`, else the parts of a `name` that splits, else a lone
@@ -628,7 +654,7 @@ pub fn places(units: &[Unit]) -> (Vec<Place>, Vec<(usize, &str)>) {
             plain = Some((u, n, swap));
         }
         for (s, at) in n.iter().zip([a, b]) {
-            if let Some(s) = s {
+            for s in s.map(parts).unwrap_or_default() {
                 mentions.entry((lang, s)).or_default().push((at, u));
             }
         }
@@ -840,7 +866,12 @@ mod tests {
         );
         assert_eq!(
             split_name("RE 1: Hamburg => Lübeck"),
-            Some(["RE 1: Hamburg", "Lübeck"])
+            Some(["Hamburg", "Lübeck"])
+        );
+        assert_eq!(split_name("V3040：漠河 - 哈尔滨"), Some(["漠河", "哈尔滨"]));
+        assert_eq!(
+            split_name("TER C25 : Strasbourg - Bâle"),
+            Some(["Strasbourg", "Bâle"])
         );
         assert_eq!(split_name("Calais --> Dover"), Some(["Calais", "Dover"]));
         assert_eq!(
@@ -853,6 +884,24 @@ mod tests {
         assert_eq!(split_name("Rostock - "), None, "an empty part");
         // The first separator of the list the name holds, wherever it stands.
         assert_eq!(split_name("A → B - C"), Some(["A → B", "C"]));
+    }
+
+    #[test]
+    fn parts_rule() {
+        assert_eq!(parts("Achele (Murnau)"), ["Achele", "Murnau"]);
+        assert_eq!(
+            parts("Addax/Sandfill/Maroko (Victoria Island)"),
+            ["Addax", "Sandfill", "Maroko", "Victoria Island"]
+        );
+        assert_eq!(parts("Fribourg / Freiburg"), ["Fribourg", "Freiburg"]);
+        assert_eq!(parts("Alderney (GBG)"), ["Alderney (GBG)"], "too short");
+        assert_eq!(parts("Batayporã/MS"), ["Batayporã/MS"]);
+        assert_eq!(parts("Brücke 3/4"), ["Brücke 3/4"]);
+        assert_eq!(parts("Frankfurt (Main) Hbf"), ["Frankfurt (Main) Hbf"]);
+        assert_eq!(
+            parts("Landungsbrücken (Brücke 3/4)"),
+            ["Landungsbrücken", "Brücke 3/4"]
+        );
     }
 
     #[test]
